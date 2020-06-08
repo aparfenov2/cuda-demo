@@ -1,0 +1,14 @@
+
+1. clone vpf
+    git clone git@github.com:NVIDIA/VideoProcessingFramework.git
+
+2. Download Video Codec SDK from NVIDIA site
+https://developer.nvidia.com/nvidia-video-codec-sdk/download
+
+3. bash build_vpf.sh
+
+4. copy PyNvCodec.cpython-36m-x86_64-linux-gnu.so from VideoProcessingFramework/install/bin to the same folder as my.py
+5. wget http://themazzone.com/big_buck_bunny_1080p_h264.mov
+6. bash run.sh
+
+Extracted frames will be stored in out folder.

@@ -33,11 +33,13 @@ class Main:
     def fps_job(self):
         self.fps.stop()
         self.last_fps = self.fps.fps()
+        print(f"fps={self.last_fps}, inp_shape={None if self.last_frame is None else self.last_frame.shape}")
 
     def detect_faces(self, detection_model, gray_image_array, conf):
         frame = gray_image_array
         # Grab frame dimention and convert to blob
         (h,w) =  frame.shape[:2]
+        self.last_frame = frame
         frame = cv2.resize(frame, (300, 300))
         # Preprocess input image: mean subtraction, normalization
         blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
@@ -150,6 +152,8 @@ class Main:
             self.input_q.put(frame)
             # process as fast as we can
             frame, crop = self.output_q.get()
+            if crop is not None and np.prod(crop.shape) > 0:
+                print("crop.shape: {crop.shape}")
             # check to see if the output frame should be displayed to our
             # screen
             if args["display"] > 0:

@@ -10,10 +10,11 @@ OPENCV_INSTALL=$PWD/opencv/install
     python3 ssd_object_detection.py \
         --prototxt face_ssd/deploy.prototxt.txt \
         --model face_ssd/res10_300x300_ssd_iter_140000.caffemodel \
-        --input /dev/video0 \
-        --display 1 \
+        --input rtsp://test:test@192.168.250.110/axis-media/media.amp \
+        --display 0 \
         --use-gpu 1 \
-        --confidence 0.6
+        --confidence 0.6 \
+        #--output processed.avi
 
         # --output ssd_guitar.avi \
         # --input example_videos/guitar.mp4 \
@@ -27,25 +28,26 @@ OPENCV_INSTALL=$PWD/opencv/install
 IMAGE=andrey-task2
 # docker build -t ${IMAGE} .
 
-XSOCK=/tmp/.X11-unix
-XAUTH=/tmp/.docker.xauth
-touch $XAUTH
+# XSOCK=/tmp/.X11-unix
+# XAUTH=/tmp/.docker.xauth
+# touch $XAUTH
 # xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
 
 mkdir -p .cache/pip || true
 
-docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     --ipc=host \
     --network host \
     --security-opt apparmor:unconfined \
-    --volume=$XSOCK:$XSOCK:rw \
-    --volume=$XAUTH:$XAUTH:rw \
     --env="XAUTHORITY=${XAUTH}" \
     --env="DISPLAY" \
     -v $PWD/.cache/pip:/home/ubuntu/.cache/pip \
     -v $(readlink -f face_ssd):/cdir/face_ssd \
-    --device=/dev/video0:/dev/video0 \
     -v $PWD:/cdir \
     -w /cdir \
     ${IMAGE} bash $0 --inside
+
+#    --device=/dev/video0:/dev/video0 \
+#	    --volume=$XSOCK:$XSOCK:rw \
+#    --volume=$XAUTH:$XAUTH:rw \
 

@@ -33,7 +33,7 @@ class Main:
     def fps_job(self):
         self.fps.stop()
         self.last_fps = self.fps.fps()
-        print(f"fps={self.last_fps}, inp_shape={None if self.last_frame is None else self.last_frame.shape}")
+        print(f"fps={self.last_fps:3.2f}, inp_shape={None if self.last_frame is None else self.last_frame.shape}")
 
     def detect_faces(self, detection_model, gray_image_array, conf):
         frame = gray_image_array

@@ -6,7 +6,8 @@ import cv2
 class Main:
     def emit_frames(self):
         gpuID = 0
-        encFile = "big_buck_bunny_1080p_h264.mov"
+#        encFile = "big_buck_bunny_1080p_h264.mov"
+        encFile = sys.argv[1]
 
         self.nvDec = nvDec = nvc.PyNvDecoder(encFile, gpuID)
         width, height = self.nvDec.Width(), self.nvDec.Height()
@@ -58,7 +59,7 @@ class Main:
         en = self.emit_frames()
         for i, e in enumerate(en):
             print(i, e.shape)
-            cv2.imwrite(f'out/{i:03}.jpg', e)
+#            cv2.imwrite(f'out/{i:03}.jpg', e)
 
 if __name__ == '__main__':
     Main().main()

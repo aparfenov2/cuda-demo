@@ -14,7 +14,7 @@ OPENCV_INSTALL=$PWD/opencv/install
         --display 0 \
         --use-gpu 1 \
         --confidence 0.6 \
-        #--output processed.avi
+#        --output processed2.avi
 
         # --output ssd_guitar.avi \
         # --input example_videos/guitar.mp4 \

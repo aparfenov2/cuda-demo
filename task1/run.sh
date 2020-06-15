@@ -7,19 +7,20 @@ set -e
     export LD_LIBRARY_PATH=$PWD/VideoProcessingFramework/install/bin:${LD_LIBRARY_PATH}
     # python3.6 SampleDecode.py 0 big_buck_bunny_1080p_h264.mov big_buck_bunny_1080p_h264.nv12
     cp $PWD/VideoProcessingFramework/install/bin/PyNvCodec.cpython-36m-x86_64-linux-gnu.so .
-    python3.6 my.py
+    #python3.6 my.py rtsp://test:test@192.168.250.110/axis-media/media.amp #- not work
+    python3.6 my.py big_buck_bunny_1080p_h264.mov
     exit 0
 }
 
 IMAGE=andrey-task1
-docker build -t ${IMAGE} .
+#docker build -t ${IMAGE} .
 
-XSOCK=/tmp/.X11-unix
-XAUTH=/tmp/.docker.xauth
-touch $XAUTH
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+#XSOCK=/tmp/.X11-unix
+#XAUTH=/tmp/.docker.xauth
+#touch $XAUTH
+#xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
 
-docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     --ipc=host \
     --network host \
     --security-opt apparmor:unconfined \

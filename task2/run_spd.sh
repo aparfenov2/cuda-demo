@@ -8,7 +8,7 @@ OPENCV_INSTALL=$PWD/opencv/install
     export PYTHONPATH=${OPENCV_INSTALL}/lib/python3.6/dist-packages:$PYTHONPATH
 
     #python3 ssd_object_detection.py \
-    python3 ssd_speed.py \
+    python3 ssd_fake.py \
         --prototxt face_ssd/deploy.prototxt.txt \
         --model face_ssd/res10_300x300_ssd_iter_140000.caffemodel \
         --input rtsp://test:test@192.168.250.110/axis-media/media.amp \

@@ -9,7 +9,9 @@ import queue
 from timeloop import Timeloop
 from datetime import timedelta
 
+from concurrent.futures import ThreadPoolExecutor
 import threading
+from collections import namedtuple
 
 tl = Timeloop()
 
@@ -17,6 +19,7 @@ tl = Timeloop()
 def fps_job():
     main_instance.fps_job()
 
+DetectionResult = namedtuple("DetectionResult", ["frame", "crop"])
 
 class Main:
     def __init__(self):
@@ -24,6 +27,7 @@ class Main:
         self.fps = FPS()
         self.fps.start()
         self.fps.stop()
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
         self.input_q = queue.Queue(16)
         self.output_q = queue.Queue(16)
@@ -33,9 +37,9 @@ class Main:
     def fps_job(self):
         self.fps.stop()
         self.last_fps = self.fps.fps()
+        print(f"fps={self.last_fps:3.2f}")
 
-    def detect_faces(self, detection_model, gray_image_array, conf):
-        frame = gray_image_array
+    def detect_faces(self, detection_model, frame, conf):
         # Grab frame dimention and convert to blob
         (h,w) =  frame.shape[:2]
         frame = cv2.resize(frame, (300, 300))
@@ -67,36 +71,47 @@ class Main:
         x_off, y_off = offsets
         return (x - x_off, x + width + x_off, y - y_off, y + height + y_off)
 
-
-    def process_entry(self):
+    def input_queue_iterator(self):
         last_frame = None
         while not self.terminating:
             if not self.input_q.empty():
                 frame = self.input_q.get()
                 last_frame = frame.copy()
+                yield frame
             elif last_frame is not None:
                 frame = last_frame.copy()
-            else:
-                continue
-            # print('.', end='',flush=True)
-            faces = self.detect_faces(self.net, frame, self.args["confidence"])
+                yield frame
 
-            face_offsets = (30, 40)
-            # print("len(faces)", len(faces))
+    def process_single_frame(self, frame):
+        # self.fps.update()
+        # return DetectionResult(frame, None)
 
-            # update the FPS counter
-            self.fps.update()
-            crop = None
-            for face_coordinates in faces:
-                x1, x2, y1, y2 = self.apply_offsets(face_coordinates, face_offsets)
-                _x1, _x2 = np.clip([x1,x2], 0, frame.shape[1])
-                _y1, _y2 = np.clip([y1,y2], 0, frame.shape[0])
-                crop = frame[_y1:_y2, _x1:_x2].copy()
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
-                # print(crop.shape, x1, x2, y1, y2)
-                # if crop.shape[0] > 0 and crop.shape[1] > 0:
+        faces = self.detect_faces(self.net, frame, self.args["confidence"])
+        face_offsets = (30, 40)
+
+        self.fps.update()
+        crop = None
+        for face_coordinates in faces:
+            x1, x2, y1, y2 = self.apply_offsets(face_coordinates, face_offsets)
+            _x1, _x2 = np.clip([x1,x2], 0, frame.shape[1])
+            _y1, _y2 = np.clip([y1,y2], 0, frame.shape[0])
+            crop = frame[_y1:_y2, _x1:_x2].copy()
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+
+        return DetectionResult(frame, crop)
+
+    def _process_iter(self, en):
+        for x in en:
+            yield self.executor.submit(self.process_single_frame, x)
+
+    def process_entry(self):
+        en = self.input_queue_iterator()
+        en = self._process_iter(en)
+        _iter = iter(en)
+        while not self.terminating:
+            ret = next(_iter)
             if not self.output_q.full():
-                self.output_q.put((frame, crop))
+                self.output_q.put(ret.result())
 
     def entry(self):
 
@@ -149,7 +164,8 @@ class Main:
             # a blob
             self.input_q.put(frame)
             # process as fast as we can
-            frame, crop = self.output_q.get()
+            ret = self.output_q.get()
+            frame, crop = ret.frame, ret.crop
             # check to see if the output frame should be displayed to our
             # screen
             if args["display"] > 0:

@@ -34,7 +34,7 @@ touch $XAUTH
 
 mkdir -p .cache/pip || true
 
-docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     --ipc=host \
     --network host \
     --security-opt apparmor:unconfined \
@@ -44,6 +44,7 @@ docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,util
     --env="DISPLAY" \
     -v $PWD/.cache/pip:/home/ubuntu/.cache/pip \
     -v $(readlink -f face_ssd):/cdir/face_ssd \
+    -v $(readlink -f opencv):/cdir/opencv \
     --device=/dev/video0:/dev/video0 \
     -v $PWD:/cdir \
     -w /cdir \

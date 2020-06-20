@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from collections import namedtuple
 from tqdm import tqdm
+from itertools import izip_longest
 
 tl = Timeloop()
 
@@ -42,7 +43,14 @@ class FPS:
         _end   = time.time()
         return  self.frames # / (_end - self._start)
 
+def grouper(n, iterable, fillvalue=None):
+    "grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    return izip_longest(fillvalue=fillvalue, *args)
+
+
 class Main:
+
     def __init__(self):
         self.last_fps = 0
         self.fps = FPS()
@@ -65,10 +73,8 @@ class Main:
     def detect_faces(self, detection_model, frame, conf):
         # Grab frame dimention and convert to blob
         (h,w) =  frame.shape[:2]
-        if not self._args.no_resize:
+        if (h,w) != (300,300):
             frame = cv2.resize(frame, (300, 300))
-            (h,w) =  frame.shape[:2]
-        assert (h,w) == (300,300)
         # Preprocess input image: mean subtraction, normalization
         blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
         # Set read image as input to model
@@ -128,7 +134,7 @@ class Main:
         faces = self.detect_faces(net, frame, self.args["confidence"])
 
         self.fps.update()
-        return DetectionResult(frame, faces)
+        return [DetectionResult(fr, fc) for fr,fc in zip(frame, faces)]
 
     def _process_iter(self, en):
         for x in en:
@@ -136,12 +142,14 @@ class Main:
 
     def process_entry(self):
         en = self.input_queue_iterator()
+        en = grouper(self._args.batch_size, en)
         en = self._process_iter(en)
         _iter = iter(en)
         while not self.terminating:
-            ret = next(_iter)
-            if not self.output_q.full():
-                self.output_q.put(ret.result())
+            rets = next(_iter)
+            for ret in rets.result():
+                if not self.output_q.full():
+                    self.output_q.put(ret)
 
     def load_model(self):
         # load our serialized model from disk
@@ -173,8 +181,8 @@ class Main:
         ap.add_argument("-u", "--use-gpu", type=bool, default=False,
             help="boolean indicating if CUDA GPU should be used")
         ap.add_argument("--workers", type=int, default=1, help="num of workers")
+        ap.add_argument("--batch_size", type=int, default=1)
         ap.add_argument("--fixed_size", type=str, help='WxH, use fixed image size (not read from input)')
-        ap.add_argument("--no_resize", action='store_true', help='disable resize on CPU')
 
         self._args = _args = ap.parse_args()
         self.args = args = vars(self._args)

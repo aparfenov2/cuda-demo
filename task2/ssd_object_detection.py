@@ -114,13 +114,8 @@ class Input:
         self.args = args
         self.terminating = terminating
         self.process_thd = threading.Thread(target=self.input_thd_etnry, name='input_thd')
-
-        if self.args.fixed_size is None:
-            self.en = self.video_en()
-        else:
-            self.en = self.fixed_en()
-
         self.in_q = queue.Queue(16)
+        self.en = self.video_en() if self.args.fixed_size is None else None # self.fixed_en()  
 
     def video_en(self):
         print("[INFO] accessing video stream...")
@@ -142,41 +137,63 @@ class Input:
     def worker_en(self):
         last_frame = None
         while not self.terminating.is_set():
-            if not self.in_q.empty():
-                frame = self.in_q.get()
+            try:
+                frame = self.in_q.get_nowait()
                 last_frame = frame.copy()
+                # print('from queue')
                 yield frame
-            elif last_frame is not None:
+                continue
+            except queue.Empty:
+                pass
+
+            if last_frame is not None:
                 frame = last_frame.copy()
+                # print('from last_frame')
                 yield frame
-            else:
-                time.sleep(0.1)
+                continue
+
+            time.sleep(1)
+                          
 
     def get_worker_iter(self):
+        if self.args.fixed_size is not None:
+            return iter(self.fixed_en())
         return iter(self.worker_en())
 
     def input_thd_etnry(self):
         print("input thread started")
+        if self.en is None:
+            print("no input source set or fixed size source - exit")
+            return
         _iter = iter(self.en)
         while not self.terminating.is_set():
             frame = next(_iter)
-            self.in_q.put(frame)
+            try:
+                self.in_q.put_nowait(frame)
+            except queue.Full:
+                time.sleep(0.001)
+            # if not self.in_q.full():
+                # print('put!')
+            # else:
+            #     print('full!')
+            # sleep(1)
         print("input thread terminated")
 
     def start_thread(self):
         self.process_thd.start()
         return self.process_thd
 
-class FPSConsumer:
-    def __init__(self, in_q, out_q, terminating):
+class FPSCounter:
+    def __init__(self, in_q, out_q, terminating, avg_len=5):
         self.in_q  = in_q
         self.out_q = out_q
+        self.avg_len = avg_len
         self.terminating = terminating
         self.process_thd = threading.Thread(target=self.thd_etnry, name='fps_thd')
         self.fps = FPS()
         self.fps.start()
         self.fps.stop()
-        self.last_fps = 0
+        self.last_fps = []
         self.tl = Timeloop()
         _deco = self.tl.job(interval=timedelta(seconds=1))
         _deco(self.fps_job)
@@ -191,17 +208,24 @@ class FPSConsumer:
         while not self.terminating.is_set():
             ret = self.in_q.get()
             self.fps.update()
-            if not self.out_q.full():
-                self.out_q.put(ret)
+            try:
+                self.out_q.put_nowait(ret)
+            except queue.Full:
+                pass
 
         self.tl.stop()
         print("fps thread terminated")
 
+    def get_last_fps(self):
+        return sum(self.last_fps)/len(self.last_fps)
+
     def fps_job(self):
         self.fps.stop()
-        self.last_fps = self.fps.fps()
+        self.last_fps.append(self.fps.fps())
         self.fps.start()
-        print(f"fps={self.last_fps:3.2f}")
+        if len(self.last_fps) > self.avg_len:
+            self.last_fps.pop(0)
+        print(f"fps: min={min(self.last_fps):3.2f}, curr={self.get_last_fps():3.2f}, max={max(self.last_fps):3.2f}")
 
 
 class Display:
@@ -218,7 +242,7 @@ class Display:
                 # crop = frame[_y1:_y2, _x1:_x2].copy()
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
 
-            cv2.putText(frame, f"{fps.last_fps:.2f}", (5, 15),
+            cv2.putText(frame, f"{fps.get_last_fps():.2f}", (5, 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
             # show the output frame
             yield ret
@@ -286,7 +310,7 @@ class Main:
                 det.start_thread()
 
             disp_q = queue.Queue(16)
-            fps = FPSConsumer(out_q, disp_q, self.terminating)
+            fps = FPSCounter(out_q, disp_q, self.terminating)
             fps.start_thread()
 
             if args.display > 0 or args.output != "":

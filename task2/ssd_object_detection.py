@@ -225,7 +225,7 @@ class FPSCounter:
         self.fps.start()
         if len(self.last_fps) > self.avg_len:
             self.last_fps.pop(0)
-        print(f"fps: min={min(self.last_fps):3.2f}, curr={self.get_last_fps():3.2f}, max={max(self.last_fps):3.2f}")
+        print(f"fps: curr={self.last_fps[-1]:3.2f}, min={min(self.last_fps):3.2f}, avg={self.get_last_fps():3.2f}, max={max(self.last_fps):3.2f}")
 
 
 class Display:

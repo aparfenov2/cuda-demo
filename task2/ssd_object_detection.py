@@ -11,17 +11,11 @@ from timeloop import Timeloop
 from datetime import timedelta
 import time
 
-from concurrent.futures import ThreadPoolExecutor
 import threading
 from collections import namedtuple
 from tqdm import tqdm
-from itertools import izip_longest
+from itertools import zip_longest
 
-tl = Timeloop()
-
-@tl.job(interval=timedelta(seconds=1))
-def fps_job():
-    main_instance.fps_job()
 
 DetectionResult = namedtuple("DetectionResult", ["frame", "faces"])
 
@@ -46,29 +40,32 @@ class FPS:
 def grouper(n, iterable, fillvalue=None):
     "grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
-    return izip_longest(fillvalue=fillvalue, *args)
+    return zip_longest(fillvalue=fillvalue, *args)
 
+class Detector:
+    def __init__(self, args, in_iter, out_q, terminating, _id):
+        self.in_iter = in_iter
+        self._id = _id
+        self.out_q = out_q
+        self.args = args
+        self.process_thd = threading.Thread(target=self.process_entry, name='detector_thd_'+str(_id))
+        self.terminating = terminating
+        self.net = None
 
-class Main:
+    def start_thread(self):
+        self.process_thd.start()
+        return self.process_thd
 
-    def __init__(self):
-        self.last_fps = 0
-        self.fps = FPS()
-        self.fps.start()
-        self.fps.stop()
-        # self.executor = ThreadPoolExecutor(max_workers=4)
-        self.threadLocal = threading.local()
-
-        self.input_q = queue.Queue(16)
-        self.output_q = queue.Queue(16)
-        self.process_thd = threading.Thread(target=self.process_entry)
-        self.terminating = False
-
-    def fps_job(self):
-        self.fps.stop()
-        self.last_fps = self.fps.fps()
-        self.fps.start()
-        print(f"fps={self.last_fps:3.2f}")
+    def load_model(self):
+        # load our serialized model from disk
+        net = cv2.dnn.readNetFromCaffe(self.args.prototxt, self.args.model)
+        # check if we are going to use GPU
+        if self.args.use_gpu:
+            # set CUDA as the preferable backend and target
+            print("[INFO] setting preferable backend and target to CUDA...")
+            net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+        return net
 
     def detect_faces(self, detection_model, frame, conf):
         # Grab frame dimention and convert to blob
@@ -98,131 +95,118 @@ class Main:
 
         return coord_list
 
-    def apply_offsets(self, face_coordinates, offsets):
-        x, y, width, height = face_coordinates
-        x_off, y_off = offsets
-        return (x - x_off, x + width + x_off, y - y_off, y + height + y_off)
+    def process_entry(self):
+        print(f"detector_thd_{self._id} started")
+        net = self.load_model()
 
-    def input_queue_iterator(self):
-        # if self._args.fixed_size is not None:
-        #     w,h = self._args.fixed_size.split('x')
-        #     frame = np.zeros((int(h),int(w),3), dtype=np.uint8)
-        #     print("use fixed_size", frame.shape)
-        #     while not self.terminating:
-        #         yield frame.copy()
-        #     return
+        while not self.terminating.is_set():
+            frame = next(self.in_iter)
+
+            faces = self.detect_faces(net, frame, self.args.confidence)
+
+            ret = DetectionResult(frame, faces)
+            # return [DetectionResult(fr, fc) for fr,fc in zip(frame, faces)]
+            self.out_q.put(ret)
+        print(f"detector_thd_{self._id} terminated")
+
+class Input:
+    def __init__(self, args, terminating):
+        self.args = args
+        self.terminating = terminating
+        self.process_thd = threading.Thread(target=self.input_thd_etnry, name='input_thd')
+
+        if self.args.fixed_size is None:
+            self.en = self.video_en()
+        else:
+            self.en = self.fixed_en()
+
+        self.in_q = queue.Queue(16)
+
+    def video_en(self):
+        print("[INFO] accessing video stream...")
+        vs = cv2.VideoCapture(self.args.input if self.args.input else 0)
+        while not self.terminating.is_set():
+            (grabbed, frame) = vs.read()
+            if not grabbed:
+                print("stream terminated")
+                break
+            yield frame
+
+    def fixed_en(self):
+        w,h = self.args.fixed_size.split('x')
+        frame = np.zeros((int(h),int(w),3), dtype=np.uint8)
+        while not self.terminating.is_set():
+            yield frame
+
+    # called from worker threads
+    def worker_en(self):
         last_frame = None
-        while not self.terminating:
-            if not self.input_q.empty():
-                frame = self.input_q.get()
+        while not self.terminating.is_set():
+            if not self.in_q.empty():
+                frame = self.in_q.get()
                 last_frame = frame.copy()
                 yield frame
             elif last_frame is not None:
                 frame = last_frame.copy()
                 yield frame
+            else:
+                time.sleep(0.1)
 
-    def process_single_frame(self, frame):
-        # self.fps.update()
-        # return DetectionResult(frame, None)
+    def get_worker_iter(self):
+        return iter(self.worker_en())
 
-        net = getattr(self.threadLocal, 'net', None)
-        if net is None:
-            print("load model from thread: ", threading.current_thread().name)
-            net = self.load_model()
-            self.threadLocal.net = net
+    def input_thd_etnry(self):
+        print("input thread started")
+        _iter = iter(self.en)
+        while not self.terminating.is_set():
+            frame = next(_iter)
+            self.in_q.put(frame)
+        print("input thread terminated")
 
-        faces = self.detect_faces(net, frame, self.args["confidence"])
-
-        self.fps.update()
-        return [DetectionResult(fr, fc) for fr,fc in zip(frame, faces)]
-
-    def _process_iter(self, en):
-        for x in en:
-            yield self.executor.submit(self.process_single_frame, x)
-
-    def process_entry(self):
-        en = self.input_queue_iterator()
-        en = grouper(self._args.batch_size, en)
-        en = self._process_iter(en)
-        _iter = iter(en)
-        while not self.terminating:
-            rets = next(_iter)
-            for ret in rets.result():
-                if not self.output_q.full():
-                    self.output_q.put(ret)
-
-    def load_model(self):
-        # load our serialized model from disk
-        net = cv2.dnn.readNetFromCaffe(self.args["prototxt"], self.args["model"])
-        # check if we are going to use GPU
-        if self.args["use_gpu"]:
-            # set CUDA as the preferable backend and target
-            print("[INFO] setting preferable backend and target to CUDA...")
-            net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
-            net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
-        return net
-
-    def entry(self):
-
-        # construct the argument parse and parse the arguments
-        ap = argparse.ArgumentParser()
-        ap.add_argument("-p", "--prototxt", required=True,
-            help="path to Caffe 'deploy' prototxt file")
-        ap.add_argument("-m", "--model", required=True,
-            help="path to Caffe pre-trained model")
-        ap.add_argument("-i", "--input", type=str, default="",
-            help="path to (optional) input video file")
-        ap.add_argument("-o", "--output", type=str, default="",
-            help="path to (optional) output video file")
-        ap.add_argument("-d", "--display", type=int, default=1,
-            help="whether or not output frame should be displayed")
-        ap.add_argument("-c", "--confidence", type=float, default=0.2,
-            help="minimum probability to filter weak detections")
-        ap.add_argument("-u", "--use-gpu", type=bool, default=False,
-            help="boolean indicating if CUDA GPU should be used")
-        ap.add_argument("--workers", type=int, default=1, help="num of workers")
-        ap.add_argument("--batch_size", type=int, default=1)
-        ap.add_argument("--fixed_size", type=str, help='WxH, use fixed image size (not read from input)')
-
-        self._args = _args = ap.parse_args()
-        self.args = args = vars(self._args)
-
-        self.executor = ThreadPoolExecutor(max_workers=_args.workers)
-
-
-        # initialize the video stream and pointer to output video file, then
-        # start the FPS timer
-        if self._args.fixed_size is None:
-            print("[INFO] accessing video stream...")
-            vs = cv2.VideoCapture(args["input"] if args["input"] else 0)
-        writer = None
+    def start_thread(self):
         self.process_thd.start()
-        tl.start(block=False)
+        return self.process_thd
 
-        if self._args.fixed_size is not None:
-            w,h = self._args.fixed_size.split('x')
-            frame = np.zeros((int(h),int(w),3), dtype=np.uint8)
-            self.input_q.put(frame)
+class FPSConsumer:
+    def __init__(self, in_q, out_q, terminating):
+        self.in_q  = in_q
+        self.out_q = out_q
+        self.terminating = terminating
+        self.process_thd = threading.Thread(target=self.thd_etnry, name='fps_thd')
+        self.fps = FPS()
+        self.fps.start()
+        self.fps.stop()
+        self.last_fps = 0
+        self.tl = Timeloop()
+        _deco = self.tl.job(interval=timedelta(seconds=1))
+        _deco(self.fps_job)
 
-        # loop over the frames from the video stream
-        while True:
-        # for _ in tqdm(range(sys.maxsize)):
-            if self._args.fixed_size is None:
-                # read the next frame from the file
-                (grabbed, frame) = vs.read()                
-                # if the frame was not grabbed, then we have reached the end
-                # of the stream
-                if not grabbed:
-                    print("stream terminated")
-                    break
-                # print("input_frame.shape", frame.shape)
-                # resize the frame, grab the frame dimensions, and convert it to
-                # a blob
-                self.input_q.put(frame)
-            # process as fast as we can
-            # if self.output_q.empty():
-            #     continue
-            ret = self.output_q.get()
+    def start_thread(self):
+        self.tl.start(block=False)
+        self.process_thd.start()
+        return self.process_thd
+    
+    def thd_etnry(self):
+        print("fps thread started")
+        while not self.terminating.is_set():
+            ret = self.in_q.get()
+            self.fps.update()
+            if not self.out_q.full():
+                self.out_q.put(ret)
+
+        self.tl.stop()
+        print("fps thread terminated")
+
+    def fps_job(self):
+        self.fps.stop()
+        self.last_fps = self.fps.fps()
+        self.fps.start()
+        print(f"fps={self.last_fps:3.2f}")
+
+
+class Display:
+    def draw(self, en, fps):
+        for ret in en:
             frame, faces = ret.frame, ret.faces
 
             crop = None
@@ -231,49 +215,124 @@ class Main:
                 x1, x2, y1, y2 = self.apply_offsets(face_coordinates, face_offsets)
                 _x1, _x2 = np.clip([x1,x2], 0, frame.shape[1])
                 _y1, _y2 = np.clip([y1,y2], 0, frame.shape[0])
-                crop = frame[_y1:_y2, _x1:_x2].copy()
+                # crop = frame[_y1:_y2, _x1:_x2].copy()
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
 
-            # check to see if the output frame should be displayed to our
-            # screen
-            if args["display"] > 0:
+            cv2.putText(frame, f"{fps.last_fps:.2f}", (5, 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
+            # show the output frame
+            yield ret
 
-                cv2.putText(frame, f"{self.last_fps:.2f}", (5, 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
-                # show the output frame
-                cv2.imshow("Frame", frame)
-                if crop is not None and np.prod(crop.shape) > 0:
-                    cv2.imshow("crop", crop)
-                key = cv2.waitKey(1) & 0xFF
-                # if the `q` key was pressed, break from the loop
-                if key == ord("q"):
-                    break
-            # if an output video file path has been supplied and the video
-            # writer has not been initialized, do so now
-            if args["output"] != "" and writer is None:
-                # initialize our video writer
-                fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-                writer = cv2.VideoWriter(args["output"], fourcc, 30,
-                    (frame.shape[1], frame.shape[0]), True)
-            # if the video writer is not None, write the frame to the output
-            # video file
-            if writer is not None:
-                writer.write(frame)
-        # stop the timer and display FPS information
-        self.fps.stop()
-        self.terminating = True
-        self.process_thd.join()
-        print("[INFO] elasped time: {:.2f}".format(self.fps.elapsed()))
-        print("[INFO] approx. FPS: {:.2f}".format(self.fps.fps()))
+    def show(self, en, fps):
+        for ret in en:
+            cv2.imshow("Frame", frame)
+            # if crop is not None and np.prod(crop.shape) > 0:
+            #     cv2.imshow("crop", crop)
+            key = cv2.waitKey(1) & 0xFF
+            # if the `q` key was pressed, break from the loop
+            if key == ord("q"):
+                break
+            yield ret
 
-    def safe_entry(self):
+    def write(self, en):
+        fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+        writer = cv2.VideoWriter(args.output, fourcc, 30,
+            (frame.shape[1], frame.shape[0]), True)
+
+        for ret in en:
+            frame, faces = ret.frame, ret.faces
+            writer.write(frame)
+            yield ret
+
+class threadsafe_iter:
+    """Takes an iterator/generator and makes it thread-safe by
+    serializing call to the `next` method of given iterator/generator.
+    """
+    def __init__(self, it):
+        self.it = it
+        self.lock = threading.Lock()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        with self.lock:
+            return next(self.it)
+
+class Main:
+
+    def __init__(self, args):
+        self.args = args
+        self.terminating = threading.Event()
+
+
+    def apply_offsets(self, face_coordinates, offsets):
+        x, y, width, height = face_coordinates
+        x_off, y_off = offsets
+        return (x - x_off, x + width + x_off, y - y_off, y + height + y_off)
+
+
+    def entry(self):
+        print("main thread started")
         try:
-            self.entry()
+            _input = Input(self.args, self.terminating)
+            _input.start_thread()
+            _in_iter = _input.get_worker_iter()
+            _in_iter = threadsafe_iter(_in_iter)
+            out_q = queue.Queue(16)
+
+            for i in range(self.args.workers):
+                det = Detector(self.args, _in_iter, out_q, self.terminating, i)
+                det.start_thread()
+
+            disp_q = queue.Queue(16)
+            fps = FPSConsumer(out_q, disp_q, self.terminating)
+            fps.start_thread()
+
+            if args.display > 0 or args.output != "":
+
+                disp = Display()
+                en = iter(disp_q.get, None)
+                en = disp.draw(en, fps)
+
+                if args.display > 0:
+                    en = disp.show(en)
+                if args.output != "":
+                    en = disp.write(en)
+
+                _iter_en = iter(en)
+                while True:
+                    next(_iter_en)
+            else:
+                while True:
+                    time.sleep(1)
         finally:
-            self.terminating = True
-            self.process_thd.join()
+            self.terminating.set()
+            print("main thread terminated")
 
 
 if __name__ == '__main__':
-    main_instance = Main()
-    main_instance.safe_entry()
+    # construct the argument parse and parse the arguments
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-p", "--prototxt", required=True,
+        help="path to Caffe 'deploy' prototxt file")
+    ap.add_argument("-m", "--model", required=True,
+        help="path to Caffe pre-trained model")
+    ap.add_argument("-i", "--input", type=str, default="",
+        help="path to (optional) input video file")
+    ap.add_argument("-o", "--output", type=str, default="",
+        help="path to (optional) output video file")
+    ap.add_argument("-d", "--display", type=int, default=1,
+        help="whether or not output frame should be displayed")
+    ap.add_argument("-c", "--confidence", type=float, default=0.2,
+        help="minimum probability to filter weak detections")
+    ap.add_argument("-u", "--use-gpu", type=bool, default=False,
+        help="boolean indicating if CUDA GPU should be used")
+    ap.add_argument("--workers", type=int, default=1, help="num of workers")
+    ap.add_argument("--batch_size", type=int, default=1)
+    ap.add_argument("--fixed_size", type=str, help='WxH, use fixed image size (not read from input)')
+
+    args = ap.parse_args()
+
+    main = Main(args)
+    main.entry()

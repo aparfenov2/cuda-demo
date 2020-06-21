@@ -14,7 +14,7 @@ OPENCV_INSTALL=$PWD/opencv/install
         --display 0 \
         --use-gpu 1 \
         --confidence 0.6 \
-        --workers 1 \
+        --workers 4 \
         --fixed_size 300x300 \
 
         # --output ssd_guitar.avi \

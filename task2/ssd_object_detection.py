@@ -106,7 +106,10 @@ class Detector:
 
             ret = DetectionResult(frame, faces)
             # return [DetectionResult(fr, fc) for fr,fc in zip(frame, faces)]
-            self.out_q.put(ret)
+            try:
+                self.out_q.put_nowait(ret)
+            except queue.Full:
+                time.sleep(0)
         print(f"detector_thd_{self._id} terminated")
 
 class Input:
@@ -152,7 +155,7 @@ class Input:
                 yield frame
                 continue
 
-            time.sleep(1)
+            time.sleep(0)
                           
 
     def get_worker_iter(self):
@@ -171,7 +174,7 @@ class Input:
             try:
                 self.in_q.put_nowait(frame)
             except queue.Full:
-                time.sleep(0.001)
+                time.sleep(0)
             # if not self.in_q.full():
                 # print('put!')
             # else:
@@ -329,7 +332,7 @@ class Main:
                     next(_iter_en)
             else:
                 while True:
-                    time.sleep(1)
+                    time.sleep(0)
         finally:
             self.terminating.set()
             print("main thread terminated")

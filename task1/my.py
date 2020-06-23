@@ -5,6 +5,7 @@ import cv2
 import argparse
 from h26x_extractor.h26x_parser import H26xParser
 from imutils.video import FPS
+import time
 
 class Main:
     def __init__(self, args):
@@ -56,8 +57,9 @@ class Main:
             encFrame = np.ndarray(shape=(0), dtype=np.uint8)
             success = nvEnc.EncodeSingleSurface(cvtSurface, encFrame)
             if not success:
-                print("encode failed")
-                break
+                print("WARN: encode failed")
+                time.sleep(0.0001)
+                continue
             bits = bytearray(encFrame)
             yield bits
 

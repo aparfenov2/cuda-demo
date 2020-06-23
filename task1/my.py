@@ -83,6 +83,7 @@ class Main:
             # print(i, e.shape)
             fps.update()
             if i % 100 == 0:
+                fps.stop()
                 print(f"fps={fps.fps():3.2f}")
             # cv2.imwrite(f'{self.args.out}/{i:03}.jpg', e)
 

@@ -63,33 +63,61 @@ class Main:
             bits = bytearray(encFrame)
             yield bits
 
-    def main(self):
+    def write_jpeg(self, en):
         os.makedirs(self.args.out, exist_ok=True)
-        en = self.decode(self.args.input)
-        en = iter(en)
-        next(en)
+        for i, e in enumerate(en):
+            cv2.imwrite(f'{self.args.out}/{i:03}.jpg', e)
+            yield e
 
-        en = self.encode(en)
-        # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
-        # en = self.download(en, nvc.PixelFormat.RGB)
-
+    def do_fps(self, en):
         fps = FPS()
         fps.start()
-
-        # H26xParser.set_callback("nalu", do_something)
-        # H26xParser.parse()        
-
-        for i, e in enumerate(en):
-            # print(i, e.shape)
+        for e in en:
             fps.update()
             if i % 100 == 0:
+                fps.stop()
                 print(f"fps={fps.fps():3.2f}")
-            # cv2.imwrite(f'{self.args.out}/{i:03}.jpg', e)
+            yield e
+
+    def write_bitstream(self, en):
+        with open(self.args.out_file, 'wb') as f:
+            for e in en:
+                f.write(e)
+                yield e
+
+    def main(self):
+        en = self.decode(self.args.input)
+        en = iter(en)
+        next(en) # initialize decoder to get image properties
+
+        if self.args.out_file is not None or self.encode:
+            en = self.encode(en)
+            en = self.do_fps(en)
+            if self.args.out_file is not None:
+                en = self.write_bitstream(en)
+
+        elif self.args.out is not None:
+            en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
+            en = self.download(en, nvc.PixelFormat.RGB)
+            en = self.do_fps(en)
+            en = self.write_jpeg(en)
+
+        else:
+            raise Exception("unexpected args combination")
+
+        en = iter(en)
+        while True:
+            next(en)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="input video")
-    parser.add_argument('--out', default='out', help="output folder")
+    parser.add_argument('--encode', action='store_true', help="run encoder")
+    parser.add_argument('--out_file', help="write bitstream to file")
+    parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
     args = parser.parse_args()
+    if args.out_file is not None and args.out is not None:
+        raise Exception("specify either --out or --out_file")
     Main(args).main()

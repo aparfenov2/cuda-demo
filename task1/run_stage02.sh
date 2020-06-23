@@ -1,6 +1,6 @@
 set -e
 VIDEO_FILE=big_buck_bunny_1080p_h264.mov
-[ "$1" == "--inner" ] && {
+[ "$1" == "--inside" ] && {
     python3 -m pip install -r requirements.txt
     # NVCUVID_LIBRARY=$PWD/Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvcuvid.so
     # NVENCODE_LIBRARY=$PWD/Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvidia-encode.so
@@ -15,17 +15,19 @@ VIDEO_FILE=big_buck_bunny_1080p_h264.mov
 IMAGE=andrey-task1
 # docker build -t ${IMAGE} .
 
-XSOCK=/tmp/.X11-unix
-XAUTH=/tmp/.docker.xauth
-touch $XAUTH
-xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+# XSOCK=/tmp/.X11-unix
+# XAUTH=/tmp/.docker.xauth
+# touch $XAUTH
+# xauth nlist $DISPLAY | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
+#    --volume=$XSOCK:$XSOCK:rw \
+#    --volume=$XAUTH:$XAUTH:rw \
 
-docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+mkdir -p .cache/pip || true
+
+docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     --ipc=host \
     --network host \
     --security-opt apparmor:unconfined \
-    --volume=$XSOCK:$XSOCK:rw \
-    --volume=$XAUTH:$XAUTH:rw \
     --env="XAUTHORITY=${XAUTH}" \
     --env="DISPLAY" \
     -v $PWD/.cache/pip:/home/ubuntu/.cache/pip \
@@ -33,5 +35,5 @@ docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,util
     -v $(readlink -f VideoProcessingFramework):/cdir/VideoProcessingFramework \
     -v $PWD:/cdir \
     -w /cdir \
-    ${IMAGE} bash $0 --inner
+    ${IMAGE} bash $0 --inside
 

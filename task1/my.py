@@ -2,63 +2,92 @@ import PyNvCodec as nvc
 import numpy as np
 import os, sys
 import cv2
+import argparse
+from h26x_extractor.h26x_parser import H26xParser
+from imutils.video import FPS
 
 class Main:
-    def emit_frames(self):
-        gpuID = 0
-        encFile = "big_buck_bunny_1080p_h264.mov"
+    def __init__(self, args):
+        self.args = args
+        self.terminating = False
 
-        self.nvDec = nvDec = nvc.PyNvDecoder(encFile, gpuID)
-        width, height = self.nvDec.Width(), self.nvDec.Height()
-
-        #Amount of memory in RAM we need to store decoded frame
-        # frameSize = nvDec.Framesize()
-        # rawFrameNV12 = np.ndarray(shape=(frameSize), dtype=np.uint8)
-
-    # to_rgb = nvc.PySurfaceConverter(nvDec.Width(), nvDec.Height(), nvc.PixelFormat.NV12, nvc.PixelFormat.RGB, gpuID)
-    # to_planar = nvc.PySurfaceConverter(nvDec.Width(), nvDec.Height(), nvc.PixelFormat.RGB, nvc.PixelFormat.RGB_PLANAR, gpuID)
-
-# https://github.com/NVIDIA/VideoProcessingFramework/issues/36
-# https://stackoverflow.com/questions/2231518/how-to-read-a-frame-from-yuv-file-in-opencv
-        self.to_rgb = nvc.PySurfaceConverter(width, height, self.nvDec.Format(), nvc.PixelFormat.RGB, gpuID) # nvc.PixelFormat.YUV420
-        # self.nvRes = nvc.PySurfaceResizer(hwidth, hheight, self.to_rgb.Format(), gpuID)
-        self.to_planar = nvc.PySurfaceConverter(width, height, nvc.PixelFormat.RGB, nvc.PixelFormat.RGB_PLANAR, gpuID)
-        self.nvDwn = nvc.PySurfaceDownloader(width, height, self.to_rgb.Format(), gpuID)
-
-        while True:
-            # success = nvDec.DecodeSingleFrame(rawFrameNV12)
-            # if not (success):
-            #     print("stream terminated")
-            #     break
-            raw_surf = self.nvDec.DecodeSingleSurface()
+    def decode(self, encFile):
+        nvDec = nvc.PyNvDecoder(encFile, self.args.gpuID)
+        self.nvDec = nvDec
+        width, height = self.get_dims()
+        while not self.terminating:
+            raw_surf = nvDec.DecodeSingleSurface()
             if (raw_surf.Empty()):
                 print('No more video frames')
                 break
+            yield raw_surf
 
-            rgb_surf = self.to_rgb.Execute(raw_surf)
+    def get_dims(self):
+        width, height = self.nvDec.Width(), self.nvDec.Height()
+        return width, height
+
+    def convert(self, en, _from, _to):
+        width, height = self.get_dims()
+        to_rgb = nvc.PySurfaceConverter(width, height, _from, _to, self.args.gpuID) # nvc.PixelFormat.YUV420
+        for raw_surf in en:
+            rgb_surf = to_rgb.Execute(raw_surf)
             if (rgb_surf.Empty()):
-                print('to_rgb failed')
+                print(f'convert from {_from} to {_to} failed')
                 break
+            yield rgb_surf
 
-            rgbp_surf = self.to_planar.Execute(rgb_surf)
-            if (rgbp_surf.Empty()):
-                print('to_planar failed')
-                break
-
+    def download(self, en, _format):
+        width, height = self.get_dims()
+        nvDwn = nvc.PySurfaceDownloader(width, height, _format, self.args.gpuID)
+        for rgbp_surf in en:
             rawFrame = np.ndarray(shape=(rgbp_surf.HostSize()), dtype=np.uint8)
-            success = self.nvDwn.DownloadSingleSurface(rgb_surf, rawFrame)
+            success = nvDwn.DownloadSingleSurface(rgbp_surf, rawFrame)
             if not (success):
                 print('Failed to download surface')
                 break
-
             yield rawFrame.reshape((height, width, 3))
 
+    def encode(self, en):
+        width, height = self.get_dims()
+        res = f"{width}x{height}"
+        nvEnc = nvc.PyNvEncoder({'preset': 'hq', 'codec': 'h264', 's': res}, self.args.gpuID)
+
+        for cvtSurface in en:
+            encFrame = np.ndarray(shape=(0), dtype=np.uint8)
+            success = nvEnc.EncodeSingleSurface(cvtSurface, encFrame)
+            if not success:
+                print("encode failed")
+                break
+            bits = bytearray(encFrame)
+            yield bits
+
     def main(self):
-        os.makedirs('out', exist_ok=True)
-        en = self.emit_frames()
+        os.makedirs(self.args.out, exist_ok=True)
+        en = self.decode(self.args.input)
+        en = iter(en)
+        next(en)
+
+        en = self.encode(en)
+        # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
+        # en = self.download(en, nvc.PixelFormat.RGB)
+
+        fps = FPS()
+        fps.start()
+
+        # H26xParser.set_callback("nalu", do_something)
+        # H26xParser.parse()        
+
         for i, e in enumerate(en):
-            print(i, e.shape)
-            cv2.imwrite(f'out/{i:03}.jpg', e)
+            # print(i, e.shape)
+            fps.update()
+            if i % 100 == 0:
+                print(f"fps={fps.fps():3.2f}")
+            # cv2.imwrite(f'{self.args.out}/{i:03}.jpg', e)
 
 if __name__ == '__main__':
-    Main().main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', help="input video")
+    parser.add_argument('--out', default='out', help="output folder")
+    parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
+    args = parser.parse_args()
+    Main(args).main()

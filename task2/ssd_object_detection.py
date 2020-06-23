@@ -44,7 +44,7 @@ def grouper(n, iterable, fillvalue=None):
 
 class Detector:
     def __init__(self, args, in_iter, out_q, terminating, _id):
-        self.in_iter = in_iter
+        self.in_iter = in_iter if args.batch_size <= 1 else grouper(args.batch_size, in_iter)
         self._id = _id
         self.out_q = out_q
         self.args = args
@@ -69,31 +69,46 @@ class Detector:
 
     def detect_faces(self, detection_model, frame, conf):
         # Grab frame dimention and convert to blob
-        (h,w) =  frame.shape[:2]
-        if (h,w) != (300,300):
-            frame = cv2.resize(frame, (300, 300))
         # Preprocess input image: mean subtraction, normalization
-        blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+        if self.args.batch_size <= 1:
+            (h,w) =  frame.shape[:2]
+            if (h,w) != (300,300):
+                frame = cv2.resize(frame, (300, 300))
+            blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+        else:
+            assert self.args.batch_size == len(frame)
+            (h,w) =  frame[0].shape[:2]
+            if (h,w) != (300,300):
+                frame = [cv2.resize(f, (300, 300)) for f in frame]
+            blob = cv2.dnn.blobFromImages(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+            # print("blob.shape", blob.shape)
         # Set read image as input to model
         detection_model.setInput(blob)
 
         # Run forward pass on model. Receive output of shape (1,1,no_of_predictions, 7)
         predictions = detection_model.forward()
-        coord_list = []
-        count = 0
-        for i in range(0, predictions.shape[2]):
-            confidence = predictions[0,0,i,2]
-            if confidence > conf:
-                # Find box coordinates rescaled to original image
-                box_coord = predictions[0,0,i,3:7] * np.array([w,h,w,h])
-                # conf_text = '{:.2f}'.format(confidence)
-                # Find output coordinates
-                xmin, ymin, xmax, ymax = box_coord.astype('int')
-                coord_list.append([xmin, ymin, (xmax-xmin), (ymax-ymin)])
+        # print("predictions",predictions.shape)
+        # assert predictions.shape[0] == self.args.batch_size, predictions.shape
+
+        faces = []
+        bsz = predictions.shape[2] // self.args.batch_size
+
+        for b in range(self.args.batch_size):
+            coord_list = []
+            for i in range(b * bsz , (b+1)*bsz):
+                confidence = predictions[0,0,i,2]
+                if confidence > conf:
+                    # Find box coordinates rescaled to original image
+                    box_coord = predictions[0,0,i,3:7] * np.array([w,h,w,h])
+                    # conf_text = '{:.2f}'.format(confidence)
+                    # Find output coordinates
+                    xmin, ymin, xmax, ymax = box_coord.astype('int')
+                    coord_list.append([xmin, ymin, (xmax-xmin), (ymax-ymin)])
+            faces.append(coord_list)
                 
             # print('Coordinate list:', coord_list)
 
-        return coord_list
+        return faces if len(faces) > 1 else faces[0]
 
     def process_entry(self):
         print(f"detector_thd_{self._id} started")
@@ -104,12 +119,22 @@ class Detector:
 
             faces = self.detect_faces(net, frame, self.args.confidence)
 
-            ret = DetectionResult(frame, faces)
-            # return [DetectionResult(fr, fc) for fr,fc in zip(frame, faces)]
-            try:
-                self.out_q.put_nowait(ret)
-            except queue.Full:
-                time.sleep(0)
+            if self.args.batch_size <= 1:
+                ret = DetectionResult(frame, faces)
+                try:
+                    self.out_q.put_nowait(ret)
+                except queue.Full:
+                    print('WARNING: worker output queue is full')
+                    time.sleep(0.0001)
+            else:
+                for fr,fa in zip(frame, faces):
+                    try:
+                        ret = DetectionResult(fr, fa)
+                        self.out_q.put_nowait(ret)
+                    except queue.Full:
+                        print('WARNING: worker output queue is full')
+                        time.sleep(0.0001)
+
         print(f"detector_thd_{self._id} terminated")
 
 class Input:
@@ -155,7 +180,7 @@ class Input:
                 yield frame
                 continue
 
-            time.sleep(0)
+            time.sleep(0.0001)
                           
 
     def get_worker_iter(self):
@@ -174,7 +199,7 @@ class Input:
             try:
                 self.in_q.put_nowait(frame)
             except queue.Full:
-                time.sleep(0)
+                time.sleep(0.0001)
             # if not self.in_q.full():
                 # print('put!')
             # else:
@@ -306,7 +331,8 @@ class Main:
             _input.start_thread()
             _in_iter = _input.get_worker_iter()
             _in_iter = threadsafe_iter(_in_iter)
-            out_q = queue.Queue(16)
+            
+            out_q = queue.Queue(4*self.args.batch_size*self.args.workers)
 
             for i in range(self.args.workers):
                 det = Detector(self.args, _in_iter, out_q, self.terminating, i)
@@ -332,7 +358,7 @@ class Main:
                     next(_iter_en)
             else:
                 while True:
-                    time.sleep(0)
+                    time.sleep(0.0001)
         finally:
             self.terminating.set()
             print("main thread terminated")

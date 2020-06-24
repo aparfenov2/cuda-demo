@@ -54,6 +54,7 @@ class Main:
         nvEnc = nvc.PyNvEncoder({'preset': 'hq', 'codec': 'h264', 's': res}, self.args.gpuID)
 
         for cvtSurface in en:
+            nvEnc.Reconfigure({}, force_idr=True)
             encFrame = np.ndarray(shape=(0), dtype=np.uint8)
             success = nvEnc.EncodeSingleSurface(cvtSurface, encFrame)
             if not success:
@@ -72,7 +73,7 @@ class Main:
     def do_fps(self, en):
         fps = FPS()
         fps.start()
-        for e in en:
+        for i,e in enumerate(en):
             fps.update()
             if i % 100 == 0:
                 fps.stop()

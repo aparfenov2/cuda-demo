@@ -106,7 +106,7 @@ class Main:
         for e in en:
             typ = 'slice'
             if 'sps' not in types_received or 'pps' not in types_received:
-                nal_unit_type, rbsp_payload = self._decode_nalu(BitStream(e))
+                nal_unit_type = self._decode_nalu(BitStream(e))
                 if nal_unit_type == NAL_UNIT_TYPE_SPS:
                     typ = 'sps'
                     types_received.add(typ)
@@ -142,7 +142,7 @@ class Main:
         en = iter(en)
         next(en) # initialize decoder to get image properties
 
-        if self.args.single_file is not None or self.encode:
+        if self.args.single_file is not None or self.args.encode:
             print("encode mode")
             en = self.encode(en)
             en = self.do_fps(en)
@@ -178,6 +178,6 @@ if __name__ == '__main__':
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
     args = parser.parse_args()
-    if args.out_file is not None and args.out is not None:
+    if args.single_file is not None and args.out is not None:
         raise Exception("specify either --out or --out_file")
     Main(args).main()

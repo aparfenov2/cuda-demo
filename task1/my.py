@@ -3,9 +3,13 @@ import numpy as np
 import os, sys
 import cv2
 import argparse
-from h26x_extractor.h26x_parser import H26xParser
+from bitstring import BitStream
+
 from imutils.video import FPS
 import time
+from collections import namedtuple
+
+ParserResult = namedtuple("ParserResult",['typ','bytes'])
 
 class Main:
     def __init__(self, args):
@@ -80,6 +84,53 @@ class Main:
                 print(f"fps={fps.fps():3.2f}")
             yield e
 
+    def _decode_nalu(self, nalu_bytes):
+        """
+        Returns nal_unit_type and RBSP payload from a NALU stream
+        """
+        START_CODE_PREFIX = "0x00000001"
+        if "0x" + nalu_bytes[0: 4*8].hex == START_CODE_PREFIX:
+            start_code = nalu_bytes.read('bytes:4')
+        else:
+            start_code = nalu_bytes.read('bytes:3')
+        forbidden_zero_bit = nalu_bytes.read(1)
+        nal_ref_idc = nalu_bytes.read('uint:2')
+        nal_unit_type = nalu_bytes.read('uint:5')
+
+        return nal_unit_type
+
+    def parse(self, en):
+        NAL_UNIT_TYPE_SPS = 7    # Sequence parameter set
+        NAL_UNIT_TYPE_PPS = 8    # Picture parameter set
+        types_received = set()
+        for e in en:
+            typ = 'slice'
+            if 'sps' not in types_received or 'pps' not in types_received:
+                nal_unit_type, rbsp_payload = self._decode_nalu(BitStream(e))
+                if nal_unit_type == NAL_UNIT_TYPE_SPS:
+                    typ = 'sps'
+                    types_received.add(typ)
+                elif nal_unit_type == NAL_UNIT_TYPE_PPS:
+                    typ = 'pps'
+                    types_received.add(typ)
+            yield ParserResult(typ, e)
+
+    def write_bin(self, en):
+        os.makedirs(self.args.out, exist_ok=True)
+        hdr = []
+        for i, e in enumerate(en):
+            if e.typ in ['sps','pps']:
+                print(f'{e.typ} received')
+                hdr.append(e)
+                continue
+            outfile = f'{self.args.out}/{i:03}.h264'
+            print(outfile)
+            with open(outfile, 'wb') as f:
+                for h in hdr:
+                    f.write(h.bytes)
+                f.write(e.bytes)
+            yield e
+
     def write_bitstream(self, en):
         with open(self.args.out_file, 'wb') as f:
             for e in en:
@@ -92,16 +143,19 @@ class Main:
         next(en) # initialize decoder to get image properties
 
         if self.args.out_file is not None or self.encode:
-            en = self.encode(en)
-            en = self.do_fps(en)
             if self.args.out_file is not None:
                 en = self.write_bitstream(en)
 
         elif self.args.out is not None:
-            en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
-            en = self.download(en, nvc.PixelFormat.RGB)
+            en = self.encode(en)
             en = self.do_fps(en)
-            en = self.write_jpeg(en)
+            en = self.parse(en)
+            en = self.write_bin(en)
+
+            # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
+            # en = self.download(en, nvc.PixelFormat.RGB)
+            # en = self.do_fps(en)
+            # en = self.write_jpeg(en)
 
         else:
             raise Exception("unexpected args combination")

@@ -132,7 +132,7 @@ class Main:
             yield e
 
     def write_bitstream(self, en):
-        with open(self.args.out_file, 'wb') as f:
+        with open(self.args.single_file, 'wb') as f:
             for e in en:
                 f.write(e)
                 yield e
@@ -142,11 +142,11 @@ class Main:
         en = iter(en)
         next(en) # initialize decoder to get image properties
 
-        if self.args.out_file is not None or self.encode:
+        if self.args.single_file is not None or self.encode:
             print("encode mode")
             en = self.encode(en)
             en = self.do_fps(en)
-            if self.args.out_file is not None:
+            if self.args.single_file is not None:
                 print("single file mode")
                 en = self.write_bitstream(en)
 
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="input video")
     parser.add_argument('--encode', action='store_true', help="run encoder")
-    parser.add_argument('--out_file', help="write bitstream to file")
+    parser.add_argument('--single_file', help="write bitstream to file")
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
     args = parser.parse_args()

@@ -99,21 +99,50 @@ class Main:
 
         return nal_unit_type
 
+    def _get_nalu_positions(self, stream):
+        START_CODE_PREFIX = "0x00000001"
+        nal_unit_positions = list(stream.findall(START_CODE_PREFIX, bytealigned=True))
+        # short_nal_unit_positions = list(stream.findall(self.START_CODE_PREFIX_SHORT, bytealigned=True))
+
+        # if not nal_unit_positions and not short_nal_unit_positions:
+        #     print("No NALUs found in stream")
+        #     return []
+        # if not nal_unit_positions:
+        #     nal_unit_positions = short_nal_unit_positions
+        # else:
+            # if there were extraneous 3-byte NAL unit start codes, use them too
+            # extra_nal_unit_pos = set([max(s - 8, 0) for s in short_nal_unit_positions]) - set(nal_unit_positions)
+            # if len(extra_nal_unit_pos) and nal_unit_positions:
+            #     if self.verbose:
+            #         print("Warning: 3-byte extra NAL unit start code found")
+            #     nal_unit_positions.extend([s + 8 for s in extra_nal_unit_pos])
+            #     nal_unit_positions = sorted(nal_unit_positions)
+
+        end_of_stream = len(stream)
+        nal_unit_positions.append(end_of_stream)
+        return nal_unit_positions
+
     def parse(self, en):
         NAL_UNIT_TYPE_SPS = 7    # Sequence parameter set
         NAL_UNIT_TYPE_PPS = 8    # Picture parameter set
         types_received = set()
         for e in en:
-            typ = 'slice'
-            if 'sps' not in types_received or 'pps' not in types_received:
-                nal_unit_type = self._decode_nalu(BitStream(e))
-                if nal_unit_type == NAL_UNIT_TYPE_SPS:
-                    typ = 'sps'
-                    types_received.add(typ)
-                elif nal_unit_type == NAL_UNIT_TYPE_PPS:
-                    typ = 'pps'
-                    types_received.add(typ)
-            yield ParserResult(typ, e)
+            nal_unit_positions = self._get_nalu_positions(e)
+            for current_nalu_pos, next_nalu_pos in zip(nal_unit_positions, islice(nal_unit_positions, 1, None)):
+                current_nalu_bytepos = int(current_nalu_pos / 8)
+                next_nalu_bytepos = int(next_nalu_pos / 8)
+                current_nalu_stream_segment = BitStream(stream[current_nalu_pos: next_nalu_pos])
+
+                typ = 'slice'
+                if 'sps' not in types_received or 'pps' not in types_received:
+                    nal_unit_type = self._decode_nalu(current_nalu_stream_segment)
+                    if nal_unit_type == NAL_UNIT_TYPE_SPS:
+                        typ = 'sps'
+                        types_received.add(typ)
+                    elif nal_unit_type == NAL_UNIT_TYPE_PPS:
+                        typ = 'pps'
+                        types_received.add(typ)
+                yield ParserResult(typ, current_nalu_stream_segment.bytes)
 
     def write_bin(self, en):
         os.makedirs(self.args.out, exist_ok=True)

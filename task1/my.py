@@ -143,12 +143,15 @@ class Main:
         next(en) # initialize decoder to get image properties
 
         if self.args.out_file is not None or self.encode:
+            print("encode mode")
             en = self.encode(en)
             en = self.do_fps(en)
             if self.args.out_file is not None:
+                print("single file mode")
                 en = self.write_bitstream(en)
 
         elif self.args.out is not None:
+            print("multiple files mode")
             en = self.encode(en)
             en = self.do_fps(en)
             en = self.parse(en)

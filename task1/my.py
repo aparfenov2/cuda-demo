@@ -143,6 +143,8 @@ class Main:
         next(en) # initialize decoder to get image properties
 
         if self.args.out_file is not None or self.encode:
+            en = self.encode(en)
+            en = self.do_fps(en)
             if self.args.out_file is not None:
                 en = self.write_bitstream(en)
 

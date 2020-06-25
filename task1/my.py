@@ -84,6 +84,35 @@ class Main:
                 print(f"fps={fps.fps():3.2f}")
             yield e
 
+    def parse_bitstream(self, en):
+        START_CODE_PREFIX = b'\x00\x00\x00\x01'
+
+        _iter = iter(en)
+
+        # look for 1st NALU, skip anything before
+        chunk = next(_iter)
+        offset = 0
+        first_nalu_pos = chunk.find(START_CODE_PREFIX, offset)
+        while first_nalu_pos < 0:
+            offset = max(offset, len(chunk) - len(START_CODE_PREFIX))
+            chunk += next(_iter)
+            first_nalu_pos = chunk.find(START_CODE_PREFIX, offset)
+
+        while True:
+            # read until next NALU or end of stream
+            offset = first_nalu_pos + len(START_CODE_PREFIX)
+            next_nalu_pos = chunk.find(START_CODE_PREFIX, offset)
+            while next_nalu_pos < 0:
+                offset = max(offset, len(chunk) - len(START_CODE_PREFIX))
+                chunk += next(_iter)
+                next_nalu_pos = chunk.find(START_CODE_PREFIX, offset)
+
+            yield chunk[first_nalu_pos:next_nalu_pos]
+            first_nalu_pos = next_nalu_pos
+            # remove old data
+            chunk = chunk[first_nalu_pos:]
+            first_nalu_pos = 0
+
     def _decode_nalu(self, nalu_bytes):
         """
         Returns nal_unit_type and RBSP payload from a NALU stream
@@ -99,66 +128,38 @@ class Main:
 
         return nal_unit_type
 
-    def _get_nalu_positions(self, stream):
-        START_CODE_PREFIX = "0x00000001"
-        nal_unit_positions = list(stream.findall(START_CODE_PREFIX, bytealigned=True))
-        # short_nal_unit_positions = list(stream.findall(self.START_CODE_PREFIX_SHORT, bytealigned=True))
 
-        # if not nal_unit_positions and not short_nal_unit_positions:
-        #     print("No NALUs found in stream")
-        #     return []
-        # if not nal_unit_positions:
-        #     nal_unit_positions = short_nal_unit_positions
-        # else:
-            # if there were extraneous 3-byte NAL unit start codes, use them too
-            # extra_nal_unit_pos = set([max(s - 8, 0) for s in short_nal_unit_positions]) - set(nal_unit_positions)
-            # if len(extra_nal_unit_pos) and nal_unit_positions:
-            #     if self.verbose:
-            #         print("Warning: 3-byte extra NAL unit start code found")
-            #     nal_unit_positions.extend([s + 8 for s in extra_nal_unit_pos])
-            #     nal_unit_positions = sorted(nal_unit_positions)
-
-        end_of_stream = len(stream)
-        nal_unit_positions.append(end_of_stream)
-        return nal_unit_positions
-
-    def parse(self, en):
+    def decode_nalu(self, en):
         NAL_UNIT_TYPE_SPS = 7    # Sequence parameter set
         NAL_UNIT_TYPE_PPS = 8    # Picture parameter set
-        types_received = set()
         for e in en:
-            stream = BitStream(e)
-            nal_unit_positions = self._get_nalu_positions(stream)
-            for current_nalu_pos, next_nalu_pos in zip(nal_unit_positions, islice(nal_unit_positions, 1, None)):
-                current_nalu_bytepos = int(current_nalu_pos / 8)
-                next_nalu_bytepos = int(next_nalu_pos / 8)
-                current_nalu_stream_segment = BitStream(stream[current_nalu_pos: next_nalu_pos])
-
-                typ = 'slice'
-                if 'sps' not in types_received or 'pps' not in types_received:
-                    nal_unit_type = self._decode_nalu(current_nalu_stream_segment)
-                    if nal_unit_type == NAL_UNIT_TYPE_SPS:
-                        typ = 'sps'
-                        types_received.add(typ)
-                    elif nal_unit_type == NAL_UNIT_TYPE_PPS:
-                        typ = 'pps'
-                        types_received.add(typ)
-                yield ParserResult(typ, current_nalu_stream_segment.bytes)
+            typ = 'slice'
+            nal_unit_type = self._decode_nalu(BitStream(e))
+            if nal_unit_type == NAL_UNIT_TYPE_SPS:
+                typ = 'sps'
+            elif nal_unit_type == NAL_UNIT_TYPE_PPS:
+                typ = 'pps'
+            # print(f'{nal_unit_type}:{typ}')
+            yield ParserResult(typ, e)
 
     def write_bin(self, en):
         os.makedirs(self.args.out, exist_ok=True)
         hdr = []
+        START_CODE_PREFIX = b'\x00\x00\x00\x01'
         for i, e in enumerate(en):
             if e.typ in ['sps','pps']:
                 print(f'{e.typ} received')
                 hdr.append(e)
+                yield e
                 continue
             outfile = f'{self.args.out}/{i:03}.h264'
-            print(outfile)
+            if i % 10 == 0:
+                print(outfile)
             with open(outfile, 'wb') as f:
                 for h in hdr:
                     f.write(h.bytes)
                 f.write(e.bytes)
+                f.write(START_CODE_PREFIX)
             yield e
 
     def write_bitstream(self, en):
@@ -184,7 +185,8 @@ class Main:
             print("multiple files mode")
             en = self.encode(en)
             en = self.do_fps(en)
-            en = self.parse(en)
+            en = self.parse_bitstream(en)
+            en = self.decode_nalu(en)
             en = self.write_bin(en)
 
             # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)

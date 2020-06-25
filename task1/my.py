@@ -4,7 +4,7 @@ import os, sys
 import cv2
 import argparse
 from bitstring import BitStream
-
+from itertools import islice
 from imutils.video import FPS
 import time
 from collections import namedtuple
@@ -127,7 +127,8 @@ class Main:
         NAL_UNIT_TYPE_PPS = 8    # Picture parameter set
         types_received = set()
         for e in en:
-            nal_unit_positions = self._get_nalu_positions(e)
+            stream = BitStream(e)
+            nal_unit_positions = self._get_nalu_positions(stream)
             for current_nalu_pos, next_nalu_pos in zip(nal_unit_positions, islice(nal_unit_positions, 1, None)):
                 current_nalu_bytepos = int(current_nalu_pos / 8)
                 next_nalu_bytepos = int(next_nalu_pos / 8)

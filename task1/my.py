@@ -55,10 +55,16 @@ class Main:
     def encode(self, en):
         width, height = self.get_dims()
         res = f"{width}x{height}"
-        nvEnc = nvc.PyNvEncoder({'preset': 'hq', 'codec': 'h264', 's': res}, self.args.gpuID)
+        other = {}
+        if self.args.bitrate is not None:
+            other = {'bitrate' : self.args.bitrate}
+        if self.args.gop is not None:
+            other = {'gop' : self.args.gop}
+        nvEnc = nvc.PyNvEncoder({'preset': self.args.preset, 'codec': 'h264', 's': res, **other}, self.args.gpuID)
 
         for cvtSurface in en:
-            nvEnc.Reconfigure({}, force_idr=True)
+            if not self.args.no_force_idr:
+                nvEnc.Reconfigure({}, force_idr=True)
             encFrame = np.ndarray(shape=(0), dtype=np.uint8)
             success = nvEnc.EncodeSingleSurface(cvtSurface, encFrame)
             if not success:
@@ -173,29 +179,28 @@ class Main:
         en = iter(en)
         next(en) # initialize decoder to get image properties
 
-        if self.args.single_file is not None or self.args.encode:
-            print("encode mode")
+        if self.args.encode or self.args.encode_and_parse or self.args.single_file:
+            print('adding encoder to pipeline')
             en = self.encode(en)
             en = self.do_fps(en)
-            if self.args.single_file is not None:
-                print("single file mode")
-                en = self.write_bitstream(en)
 
-        elif self.args.out is not None:
-            print("multiple files mode")
-            en = self.encode(en)
-            en = self.do_fps(en)
+        if self.args.single_file is not None:
+            print("writing bitstream to single file")
+            en = self.write_bitstream(en)
+
+        if self.args.encode_and_parse or self.args.out is not None:
+            print('adding parser to pipeline')
             en = self.parse_bitstream(en)
             en = self.decode_nalu(en)
+
+        if self.args.out is not None:
+            print("writing to multiple files")
             en = self.write_bin(en)
 
             # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
             # en = self.download(en, nvc.PixelFormat.RGB)
             # en = self.do_fps(en)
             # en = self.write_jpeg(en)
-
-        else:
-            raise Exception("unexpected args combination")
 
         en = iter(en)
         while True:
@@ -205,11 +210,14 @@ class Main:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="input video")
-    parser.add_argument('--encode', action='store_true', help="run encoder")
+    parser.add_argument('--encode', action='store_true', help="run encoder only")
+    parser.add_argument('--encode_and_parse', action='store_true', help='run encoder & parser')
     parser.add_argument('--single_file', help="write bitstream to file")
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
+    parser.add_argument('--preset', default='hq')
+    parser.add_argument('--bitrate')
+    parser.add_argument('--no_force_idr', action='store_true')
+    parser.add_argument('--gop', help='gop value')
     args = parser.parse_args()
-    if args.single_file is not None and args.out is not None:
-        raise Exception("specify either --out or --out_file")
     Main(args).main()

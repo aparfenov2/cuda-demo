@@ -176,6 +176,7 @@ class Main:
 
     def decode_with_loop(self):
         while True:
+            print(f"start decoding file {self.args.input}")
             en = self.decode(self.args.input)
             _iter = iter(en)
             while True:

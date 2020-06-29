@@ -155,9 +155,11 @@ class Main:
         _sum = 0
         for i,e in enumerate(en):
             _sum += len(e.bytes)
-            if i % 100 == 0:
+            if i % 1000 == 0:
                 _end = time.time()
                 print(f'cummulative bitrate: {_sum/(_end-_start):5.2f}')
+                _start = time.time()
+                _sum = 0
             yield e
 
     def parse_bitstream(self, en):

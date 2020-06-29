@@ -231,7 +231,7 @@ if __name__ == '__main__':
     parser.add_argument('--preset', default='hq')
     parser.add_argument('--bitrate')
     # parser.add_argument('--no_force_idr', action='store_true')
-    parser.add_argument('--gop', type=int, default=1, help='gop value')
+    parser.add_argument('--gop', default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
     args = parser.parse_args()
     Main(args).main()

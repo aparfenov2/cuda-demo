@@ -150,6 +150,16 @@ class Main:
                 sz.print_rarely()
             yield e
 
+    def do_nalu_size2(self, en):
+        start = time.time()
+        _sum = 0
+        for i,e in enumerate(en):
+            _sum += len(e.bytes)
+            if i % 100 == 0:
+                _end = time.time()
+                print(f'cummulative bitrate: {_sum/(_end-_start):5.2f}')
+            yield e
+
     def parse_bitstream(self, en):
         START_CODE_PREFIX = b'\x00\x00\x00\x01'
 
@@ -269,7 +279,7 @@ class Main:
             en = self.parse_bitstream(en)
             en = self.decode_nalu(en)
             if self.args.print_size:
-                en = self.do_nalu_size(en)
+                en = self.do_nalu_size2(en)
 
         if self.args.single_file:
             assert self.args.encode, "encoder should be enabled for single_file"

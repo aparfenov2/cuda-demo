@@ -272,6 +272,6 @@ if __name__ == '__main__':
     # parser.add_argument('--no_force_idr', action='store_true')
     parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
-    parser.add_argument('--avg_len', type=int, default=5, dest='average fps len')
+    parser.add_argument('--avg_len', type=int, default=5, help='average fps len')
     args = parser.parse_args()
     Main(args).main()

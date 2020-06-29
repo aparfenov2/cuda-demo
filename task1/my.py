@@ -63,8 +63,8 @@ class Main:
         nvEnc = nvc.PyNvEncoder({'preset': self.args.preset, 'codec': 'h264', 's': res, **other}, self.args.gpuID)
 
         for cvtSurface in en:
-            if not self.args.no_force_idr:
-                nvEnc.Reconfigure({}, force_idr=True)
+            # if not self.args.no_force_idr:
+            #     nvEnc.Reconfigure({}, force_idr=True)
             encFrame = np.ndarray(shape=(0), dtype=np.uint8)
             success = nvEnc.EncodeSingleSurface(cvtSurface, encFrame)
             if not success:
@@ -230,8 +230,8 @@ if __name__ == '__main__':
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
     parser.add_argument('--preset', default='hq')
     parser.add_argument('--bitrate')
-    parser.add_argument('--no_force_idr', action='store_true')
-    parser.add_argument('--gop', help='gop value')
+    # parser.add_argument('--no_force_idr', action='store_true')
+    parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
     args = parser.parse_args()
     Main(args).main()

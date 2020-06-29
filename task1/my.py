@@ -122,7 +122,7 @@ class Main:
             yield e
 
     def do_fps(self, en):
-        fps = FPSCounter()
+        fps = FPSCounter(avg_len=self.args.avg_len)
         for i,e in enumerate(en):
             fps.update()
             if i % 100 == 0:
@@ -272,5 +272,6 @@ if __name__ == '__main__':
     # parser.add_argument('--no_force_idr', action='store_true')
     parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
+    parser.add_argument('--avg_len', type=int, default=5, dest='average fps len')
     args = parser.parse_args()
     Main(args).main()

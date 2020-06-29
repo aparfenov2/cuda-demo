@@ -174,6 +174,18 @@ class Main:
                 f.write(e)
                 yield e
 
+    def decode_with_loop(self):
+        while True:
+            en = self.decode(self.args.input)
+            _iter = iter(en)
+            while True:
+                try:
+                    yield next(_iter)
+                except StopIteration:
+                    break
+            if not self.args.loop:
+                break
+
     def main(self):
         en = self.decode(self.args.input)
         en = iter(en)
@@ -219,5 +231,6 @@ if __name__ == '__main__':
     parser.add_argument('--bitrate')
     parser.add_argument('--no_force_idr', action='store_true')
     parser.add_argument('--gop', help='gop value')
+    parser.add_argument('--loop', action='store_true', help='repeat reading file')
     args = parser.parse_args()
     Main(args).main()

@@ -24,7 +24,6 @@ class FPS:
 
     def update(self):
         self.frames += 1
-        fps_job()
         _end   = time.time()
         return  self.frames # / (_end - self._start)
 

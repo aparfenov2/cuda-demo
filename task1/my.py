@@ -151,7 +151,7 @@ class Main:
             yield e
 
     def do_nalu_size2(self, en):
-        start = time.time()
+        _start = time.time()
         _sum = 0
         for i,e in enumerate(en):
             _sum += len(e.bytes)

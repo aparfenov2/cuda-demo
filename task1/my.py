@@ -25,11 +25,10 @@ class FPS:
     def update(self):
         self.frames += 1
         _end   = time.time()
-        return  self.frames # / (_end - self._start)
 
     def fps(self):
         _end   = time.time()
-        return  self.frames # / (_end - self._start)
+        return  self.frames / (_end - self._start)
 
 class FPSCounter:
     def __init__(self, avg_len=5):

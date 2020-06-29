@@ -5,11 +5,50 @@ import cv2
 import argparse
 from bitstring import BitStream
 from itertools import islice
-from imutils.video import FPS
+# from imutils.video import FPS
 import time
 from collections import namedtuple
 
 ParserResult = namedtuple("ParserResult",['typ','bytes'])
+
+class FPS:
+    def __init__(self):
+        self.start()
+
+    def start(self):
+        self._start = time.time()
+        self.frames = 0
+
+    def stop(self):
+        pass
+
+    def update(self):
+        self.frames += 1
+        fps_job()
+        _end   = time.time()
+        return  self.frames # / (_end - self._start)
+
+class FPSCounter:
+    def __init__(self, avg_len=5):
+        self.avg_len = avg_len
+        self.fps = FPS()
+        self.fps.start()
+        self.fps.stop()
+        self.last_fps = []
+
+    def update(self):
+        self.fps.update()
+
+    def get_last_fps(self):
+        return sum(self.last_fps)/len(self.last_fps)
+
+    def fps_job(self):
+        self.fps.stop()
+        self.last_fps.append(self.fps.fps())
+        self.fps.start()
+        if len(self.last_fps) > self.avg_len:
+            self.last_fps.pop(0)
+        print(f"fps: curr={self.last_fps[-1]:3.2f}, min={min(self.last_fps):3.2f}, avg={self.get_last_fps():3.2f}, max={max(self.last_fps):3.2f}")
 
 class Main:
     def __init__(self, args):
@@ -81,13 +120,11 @@ class Main:
             yield e
 
     def do_fps(self, en):
-        fps = FPS()
-        fps.start()
+        fps = FPSCounter()
         for i,e in enumerate(en):
             fps.update()
             if i % 100 == 0:
-                fps.stop()
-                print(f"fps={fps.fps():3.2f}")
+                fps.fps_job()
             yield e
 
     def parse_bitstream(self, en):

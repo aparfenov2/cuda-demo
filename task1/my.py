@@ -188,7 +188,7 @@ class Main:
                 break
 
     def main(self):
-        en = self.decode(self.args.input)
+        en = self.decode_with_loop()
         en = iter(en)
         next(en) # initialize decoder to get image properties
 

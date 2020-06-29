@@ -52,6 +52,19 @@ class FPSCounter:
             self.last_fps.pop(0)
         print(f"fps: curr={self.last_fps[-1]:3.2f}, min={min(self.last_fps):3.2f}, avg={self.get_last_fps():3.2f}, max={max(self.last_fps):3.2f}")
 
+class NaluSizeMeter:
+    def __init__(self, avg_len=5):
+        self.avg_len = avg_len
+        self.last_size = []
+
+    def update(self,sz):
+        self.last_size.append(sz)
+        if len(self.last_size) > self.avg_len:
+            self.last_size.pop(0)
+
+    def print_rarely(self):
+        print(f"nalu_size: curr={self.last_size[-1]:3.2f}, min={min(self.last_size):3.2f}, avg={sum(self.last_size)/len(self.last_size):3.2f}, max={max(self.last_size):3.2f}")
+
 class Main:
     def __init__(self, args):
         self.args = args
@@ -127,6 +140,14 @@ class Main:
             fps.update()
             if i % 100 == 0:
                 fps.fps_job()
+            yield e
+
+    def do_nalu_size(self, en):
+        sz = NaluSizeMeter(avg_len=self.args.avg_len)
+        for i,e in enumerate(en):
+            sz.update(len(e.bytes))
+            if i % 100 == 0:
+                sz.print_rarely()
             yield e
 
     def parse_bitstream(self, en):
@@ -226,33 +247,47 @@ class Main:
             if not self.args.loop:
                 break
 
+    def nalu_to_raw(self, en):
+        for e in en:
+            yield e.bytes
+
     def main(self):
         en = self.decode_with_loop()
         en = iter(en)
         next(en) # initialize decoder to get image properties
 
-        if self.args.encode or self.args.encode_and_parse or self.args.single_file:
+        en = self.do_fps(en)
+
+        if self.args.encode:
             print('adding encoder to pipeline')
             en = self.encode(en)
-            en = self.do_fps(en)
 
-        if self.args.single_file is not None:
-            print("writing bitstream to single file")
-            en = self.write_bitstream(en)
+        if self.args.parse:
+            assert self.args.encode, "encoder should be enabled for parser"
 
-        if self.args.encode_and_parse or self.args.out is not None:
             print('adding parser to pipeline')
             en = self.parse_bitstream(en)
             en = self.decode_nalu(en)
+            if self.args.print_size:
+                en = self.do_nalu_size(en)
 
-        if self.args.out is not None:
-            print("writing to multiple files")
-            en = self.write_bin(en)
+        if self.args.single_file:
+            assert self.args.encode, "encoder should be enabled for single_file"
+            print("writing bitstream to single file")
+            if self.args.parse:
+                en = self.nalu_to_raw(en)
+            en = self.write_bitstream(en)
 
-            # en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
-            # en = self.download(en, nvc.PixelFormat.RGB)
-            # en = self.do_fps(en)
-            # en = self.write_jpeg(en)
+        if self.args.out:
+            if self.args.encode:
+                assert self.args.parse, "parser should be enabled for I frames saver"
+                print("writing I frames to multiple files")
+                en = self.write_bin(en)
+            else:
+                print("writing frames to JPEG files")
+                en = self.convert(en, self.nvDec.Format(), nvc.PixelFormat.RGB)
+                en = self.download(en, nvc.PixelFormat.RGB)
+                en = self.write_jpeg(en)
 
         en = iter(en)
         while True:
@@ -263,7 +298,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="input video")
     parser.add_argument('--encode', action='store_true', help="run encoder only")
-    parser.add_argument('--encode_and_parse', action='store_true', help='run encoder & parser')
+    parser.add_argument('--parse', action='store_true', help='run parser')
     parser.add_argument('--single_file', help="write bitstream to file")
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
@@ -273,5 +308,10 @@ if __name__ == '__main__':
     parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
     parser.add_argument('--avg_len', type=int, default=5, help='average fps len')
+    parser.add_argument('--print_size', action='store_true', help='print avg nalu size')
     args = parser.parse_args()
+
+    if args.parse:
+        args.encode = True
+
     Main(args).main()

@@ -143,7 +143,7 @@ class Main:
             yield e
 
     def do_nalu_size(self, en):
-        sz = NaluSizeMeter(avg_len=self.args.avg_len)
+        sz = NaluSizeMeter(avg_len=self.args.avg_nalu_len)
         for i,e in enumerate(en):
             sz.update(len(e.bytes))
             if i % 100 == 0:
@@ -308,6 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
     parser.add_argument('--avg_len', type=int, default=5, help='average fps len')
+    parser.add_argument('--avg_nalu_len', type=int, default=5, help='average nalu size acc len')
     parser.add_argument('--print_size', action='store_true', help='print avg nalu size')
     args = parser.parse_args()
 

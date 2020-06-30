@@ -34,13 +34,10 @@ optional:
     --single_file <filename>   write transcoded bitstream to file
     --out <dir>         split transcoded bitstream to individual NALU frames and write each to separate file in the folder
     --gpuid <int>       gpuid to run on
-    --preset <preset>   encoder preset, see https://developer.nvidia.com/blog/vpf-hardware-accelerated-video-processing-framework-in-python/
-    --bitrate <int>     encoder bitrate
-    --gop <int>         gop value
-    --loop              read file in a loop
     --avg_len           length of the buffer for fps averaging
     --avg_nalu_len      length of the buffer for NALU size averaging
     --print_size        print size stats of NALU
+    --conf <key> <value> encoder parameters, see https://developer.nvidia.com/blog/vpf-hardware-accelerated-video-processing-framework-in-python/
 
 Examples:
 
@@ -48,7 +45,7 @@ hw decode and count fps (no write)
     python3.6 my.py big_buck_bunny_1080p_h264.mov
 
 hw decode+encode and count fps infinitely (no write) with explicit preset & bitrate & gop
-    python3.6 my.py big_buck_bunny_1080p_h264.mov --loop --encode --preset hp --bitrate 5M --gop 1
+    python3.6 my.py big_buck_bunny_1080p_h264.mov --loop --encode --conf preset hp --conf bitrate 5M --conf gop 1
 
 transcode & write to single file & print NALU size stats 
     python3.6 my.py big_buck_bunny_1080p_h264.mov --encode --parse --print_size --single_file bitstream.h264

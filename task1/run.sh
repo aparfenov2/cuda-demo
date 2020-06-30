@@ -8,7 +8,7 @@ VIDEO_FILE=big_buck_bunny_1080p_h264.mov
     export LD_LIBRARY_PATH=$PWD/VideoProcessingFramework/install/bin:${LD_LIBRARY_PATH}
     # python3.6 SampleDecode.py 0 big_buck_bunny_1080p_h264.mov big_buck_bunny_1080p_h264.nv12
     cp $PWD/VideoProcessingFramework/install/bin/PyNvCodec.cpython-36m-x86_64-linux-gnu.so .
-    python3.6 my.py $VIDEO_FILE
+    python3.6 my.py $VIDEO_FILE $2 $3 $4 $5 $6 $7 $8 $9
     exit 0
 }
 
@@ -33,5 +33,5 @@ docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,util
     -v $(readlink -f VideoProcessingFramework):/cdir/VideoProcessingFramework \
     -v $PWD:/cdir \
     -w /cdir \
-    ${IMAGE} bash $0 --inner
+    ${IMAGE} bash $0 --inner $1 $2 $3 $4 $5 $6 $7 $8 $9
 

@@ -109,12 +109,16 @@ class Main:
     def encode(self, en):
         width, height = self.get_dims()
         res = f"{width}x{height}"
-        other = {}
-        if self.args.bitrate is not None:
-            other = {'bitrate' : self.args.bitrate}
-        if self.args.gop is not None:
-            other = {'gop' : str(self.args.gop)}
-        nvEnc = nvc.PyNvEncoder({'preset': self.args.preset, 'codec': 'h264', 's': res, **other}, self.args.gpuID)
+        conf = dict(args.conf)
+        if 'preset' not in conf:
+            conf['preset'] = 'hq'
+        if 'codec' not in conf:
+            conf['codec'] = 'h264'
+        if 's' not in conf:
+            conf['s'] = res
+
+        print("effective encocer params:", conf)
+        nvEnc = nvc.PyNvEncoder(conf, self.args.gpuID)
 
         for cvtSurface in en:
             # if not self.args.no_force_idr:
@@ -314,15 +318,14 @@ if __name__ == '__main__':
     parser.add_argument('--single_file', help="write bitstream to file")
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
-    parser.add_argument('--preset', default='hq')
-    parser.add_argument('--bitrate')
-    # parser.add_argument('--no_force_idr', action='store_true')
-    parser.add_argument('--gop', type=int, default=1, help='gop value')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
     parser.add_argument('--avg_len', type=int, default=5, help='average fps len')
     parser.add_argument('--avg_nalu_len', type=int, default=5, help='average nalu size acc len')
     parser.add_argument('--print_size', action='store_true', help='print avg nalu size')
+    parser.add_argument('--conf', nargs=2, action='append')
+
     args = parser.parse_args()
+    print("cmdline encoder params: ", args.conf)
 
     if args.parse:
         args.encode = True

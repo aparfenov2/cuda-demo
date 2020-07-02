@@ -74,12 +74,18 @@ class Main:
         nvDec = nvc.PyNvDecoder(encFile, self.args.gpuID)
         self.nvDec = nvDec
         width, height = self.get_dims()
+        i = 0
         while not self.terminating:
+            if self.args.limit is not None:
+                if i > self.args.limit:
+                    print(f'limit of {self.args.limit} frames reached. Stream terminated.')
+                    break
             raw_surf = nvDec.DecodeSingleSurface()
             if (raw_surf.Empty()):
                 print('No more video frames')
                 break
             yield raw_surf
+            i += 1
 
     def get_dims(self):
         width, height = self.nvDec.Width(), self.nvDec.Height()
@@ -161,7 +167,7 @@ class Main:
             _sum += len(e.bytes)
             if i % 1000 == 0:
                 _end = time.time()
-                print(f'cummulative bitrate: {_sum/(_end-_start):5.2f}')
+                print(f'cummulative size:{_sum} bytes, bitrate: {_sum/(_end-_start):5.2f}, bytes')
                 _start = time.time()
                 _sum = 0
             yield e
@@ -319,6 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--out', help="output folder")
     parser.add_argument('--gpuid', type=int, default=0, dest='gpuID')
     parser.add_argument('--loop', action='store_true', help='repeat reading file')
+    parser.add_argument('--limit', type=int, help='limit nmuber of frames')
     parser.add_argument('--avg_len', type=int, default=5, help='average fps len')
     parser.add_argument('--avg_nalu_len', type=int, default=5, help='average nalu size acc len')
     parser.add_argument('--print_size', action='store_true', help='print avg nalu size')

@@ -115,7 +115,7 @@ class Main:
     def encode(self, en):
         width, height = self.get_dims()
         res = f"{width}x{height}"
-        conf = dict(self.args.conf)
+        conf = dict(self.args.conf) if self.args.conf is not None else {}
         if 'preset' not in conf:
             conf['preset'] = 'hq'
         if 'codec' not in conf:

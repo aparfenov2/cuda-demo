@@ -115,7 +115,7 @@ class Main:
     def encode(self, en):
         width, height = self.get_dims()
         res = f"{width}x{height}"
-        conf = dict(args.conf)
+        conf = dict(self.args.conf)
         if 'preset' not in conf:
             conf['preset'] = 'hq'
         if 'codec' not in conf:
@@ -315,8 +315,7 @@ class Main:
         while True:
             next(en)
 
-
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('input', help="input video")
     parser.add_argument('--encode', action='store_true', help="run encoder only")
@@ -338,3 +337,6 @@ if __name__ == '__main__':
         args.encode = True
 
     Main(args).main()
+
+if __name__ == '__main__':
+    main()

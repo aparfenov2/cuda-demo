@@ -151,6 +151,7 @@ class Main:
             if i % 100 == 0:
                 fps.fps_job()
             yield e
+        fps.fps_job()
 
     def do_nalu_size(self, en):
         sz = NaluSizeMeter(avg_len=self.args.avg_nalu_len)
@@ -159,6 +160,7 @@ class Main:
             if i % 100 == 0:
                 sz.print_rarely()
             yield e
+        sz.print_rarely()
 
     def do_nalu_size2(self, en):
         _start = time.time()
@@ -171,6 +173,8 @@ class Main:
                 _start = time.time()
                 _sum = 0
             yield e
+        _end = time.time()
+        print(f'cummulative size:{_sum} bytes, bitrate: {_sum/(_end-_start):5.2f}, bytes')
 
     def parse_bitstream(self, en):
         START_CODE_PREFIX = b'\x00\x00\x00\x01'

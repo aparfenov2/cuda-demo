@@ -4,7 +4,7 @@ OPENCV_INSTALL=$PWD/opencv/install
 video=video_320.mp4
 _TKDNN_MODE=fp32
 _TKDNN_BATCHSIZE=1
-
+POSITIONAL=("$@")
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --320) video="video_320.mp4" ;;
@@ -17,6 +17,13 @@ while [[ "$#" -gt 0 ]]; do
     esac
     shift
 done
+
+echo -------------
+echo POSITIONAL=${POSITIONAL[@]}
+echo MODE=${_TKDNN_MODE}
+echo BSIZE=${_TKDNN_BATCHSIZE}
+echo video=${video}
+echo prep=${prep}
 
 [ -n "$inside" ] && {
     export LD_LIBRARY_PATH=${OPENCV_INSTALL}/lib:${LD_LIBRARY_PATH}
@@ -68,7 +75,8 @@ docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     --env="DISPLAY" \
     -v $PWD/.cache/pip:/home/ubuntu/.cache/pip \
     -v $PWD:/cdir \
+
     -v $(readlink -f opencv):/cdir/opencv \
     -w /cdir \
-    ${IMAGE} bash $0 --inside ${@:1}
+    ${IMAGE} bash $0 --inside "${POSITIONAL[@]}"
 

@@ -1,24 +1,49 @@
 # https://www.pyimagesearch.com/2020/02/10/opencv-dnn-with-nvidia-gpus-1549-faster-yolo-ssd-and-mask-r-cnn/
 set -e
 OPENCV_INSTALL=$PWD/opencv/install
-[ "$1" == "--inside" ] && {
+video=video_320.mp4
+_TKDNN_MODE=fp32
+_TKDNN_BATCHSIZE=1
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --320) video="video_320.mp4" ;;
+        --1920) video="video_1920.mp4" ;;
+        --inside) inside=1 ;;
+        --batch) _TKDNN_BATCHSIZE="$2"; shift ;;
+        --mode) _TKDNN_MODE="$2"; shift ;;
+        --prep) prep=1 ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
     shift
+done
+
+[ -n "$inside" ] && {
     export LD_LIBRARY_PATH=${OPENCV_INSTALL}/lib:${LD_LIBRARY_PATH}
 
     cd tkDNN/build
 # prep
-export TKDNN_BATCHSIZE=4
-export TKDNN_MODE=FP16
-if [ "$1" == '--prep' ] ; then
+[ "${_TKDNN_BATCHSIZE}" -gt 1 ] && {
+    export TKDNN_BATCHSIZE=${_TKDNN_BATCHSIZE}
+}
+[ "${_TKDNN_MODE}" == "int8" ] && {
+    export TKDNN_CALIB_LABEL_PATH=../demo/COCO_val2017/all_labels.txt
+    export TKDNN_CALIB_IMG_PATH=../demo/COCO_val2017/all_images.txt
+    [ -f "${TKDNN_CALIB_IMG_PATH}" ] || {
+        echo COCO calib files not found. Please run bash scripts/download_validation.sh COCO first.
+        exit 0
+    }
+}
+
+export TKDNN_MODE=${_TKDNN_MODE^^}
+[ -n "$prep" ] && {
   echo "prepare!"
   rm yolo4tiny_*.rt || true
   ./test_yolo4tiny
   ls -l
-fi
-#    ./demo yolo4tiny_fp32.rt ../../video_320.mp4 y 80 4 0
-#    ./demo yolo4tiny_fp32.rt ../../video_1920.mp4 y 80 4 0
-#    ./demo yolo4tiny_fp16.rt ../../video_320.mp4 y 80 4 0
-    ./demo yolo4tiny_fp16.rt ../../video_1920.mp4 y 80 4 0
+}
+set -x
+    ./demo yolo4tiny_${_TKDNN_MODE}.rt ../../${video} y 80 ${_TKDNN_BATCHSIZE} 0
     exit 0
 }
 

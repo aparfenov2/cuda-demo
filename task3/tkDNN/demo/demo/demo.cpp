@@ -10,6 +10,7 @@
 
 #include <fstream>
 #include <string>
+#include <set>
 #include <iostream>
 
 bool gRun;
@@ -102,6 +103,7 @@ int main(int argc, char *argv[]) {
     std::vector<cv::Mat> batch_dnn_input;
 
     std::ofstream out(detlog);
+    std::set<std::string> all_detected_classes;
 
     int fidx = 0;
     int detected_total = 0;
@@ -146,6 +148,8 @@ int main(int argc, char *argv[]) {
                     y1          = b.y + b.h;
                     det_class   = detNN->classesNames[b.cl];
 
+                    all_detected_classes.emplace(det_class);
+
                     out << x0 << " " << y0 << " " << x1 << " " << y1 << " " << det_class << "; ";
                 }
                 out << std::endl;
@@ -168,7 +172,12 @@ int main(int argc, char *argv[]) {
     double mean = 0; 
 
     std::cout << "Detections per frame: " << detected_total << "/" << fidx << " = " << float(detected_total)/float(fidx) << std::endl;
-    
+    std::cout << "All detected classes: ";
+
+    for (auto const& cls : all_detected_classes) {
+        std::cout << cls << ' ';
+    }    
+    std::cout << std::endl;
     std::cout<<COL_GREENB<<"\n\nTime stats:\n";
     std::cout<<"Min: "<<*std::min_element(detNN->stats.begin(), detNN->stats.end())/n_batch<<" ms\n";    
     std::cout<<"Max: "<<*std::max_element(detNN->stats.begin(), detNN->stats.end())/n_batch<<" ms\n";    

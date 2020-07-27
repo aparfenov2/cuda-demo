@@ -8,6 +8,10 @@
 #include "MobilenetDetection.h"
 #include "Yolo3Detection.h"
 
+#include <fstream>
+#include <string>
+#include <iostream>
+
 bool gRun;
 bool SAVE_RESULT = false;
 
@@ -40,6 +44,10 @@ int main(int argc, char *argv[]) {
     bool show = true;
     if(argc > 6)
         show = atoi(argv[6]); 
+
+    std::string detlog = "detlog.txt";
+    if(argc > 7)
+        detlog = argv[7]; 
 
     if(n_batch < 1 || n_batch > 64)
         FatalError("Batch dim not supported");
@@ -93,6 +101,11 @@ int main(int argc, char *argv[]) {
     std::vector<cv::Mat> batch_frame;
     std::vector<cv::Mat> batch_dnn_input;
 
+    std::ofstream out(detlog);
+
+    int fidx = 0;
+    int detected_total = 0;
+
     while(gRun) {
         batch_dnn_input.clear();
         batch_frame.clear();
@@ -114,6 +127,31 @@ int main(int argc, char *argv[]) {
         detNN->update(batch_dnn_input, n_batch);
         detNN->draw(batch_frame);
 
+        {
+            tk::dnn::box b;
+            int x0, w, x1, y0, h, y1;
+            int objClass;
+            std::string det_class;
+
+            for(int bi=0; bi< n_batch; ++bi) {
+                // draw dets
+                out << fidx++ << " " << detNN->batchDetected[bi].size() << ": ";
+                detected_total += detNN->batchDetected[bi].size();
+
+                for(int i=0; i< detNN->batchDetected[bi].size(); i++) { 
+                    b           = detNN->batchDetected[bi][i];
+                    x0          = b.x;
+                    x1          = b.x + b.w;
+                    y0          = b.y;
+                    y1          = b.y + b.h;
+                    det_class   = detNN->classesNames[b.cl];
+
+                    out << x0 << ", " << y0 << ", " << x1 << ", " << y1 << " " << det_class << "; ";
+                }
+                out << std::endl;
+            }
+        }
+
         if(show){
             for(int bi=0; bi< n_batch; ++bi){
                 cv::imshow("detection", batch_frame[bi]);
@@ -124,8 +162,12 @@ int main(int argc, char *argv[]) {
             resultVideo << frame;
     }
 
+    out.close();
+
     std::cout<<"detection end\n";   
     double mean = 0; 
+
+    std::cout << "Detections per frame: " << detected_total << "/" << fidx << " = " << float(detected_total)/float(fidx) << std::endl;
     
     std::cout<<COL_GREENB<<"\n\nTime stats:\n";
     std::cout<<"Min: "<<*std::min_element(detNN->stats.begin(), detNN->stats.end())/n_batch<<" ms\n";    

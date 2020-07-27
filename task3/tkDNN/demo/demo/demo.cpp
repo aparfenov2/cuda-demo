@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
                     y1          = b.y + b.h;
                     det_class   = detNN->classesNames[b.cl];
 
-                    out << x0 << ", " << y0 << ", " << x1 << ", " << y1 << " " << det_class << "; ";
+                    out << x0 << " " << y0 << " " << x1 << " " << y1 << " " << det_class << "; ";
                 }
                 out << std::endl;
             }

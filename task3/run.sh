@@ -4,7 +4,7 @@ OPENCV_INSTALL=$PWD/opencv/install
 
 [ "$1" == "--inside" ] && {
     cd tkDNN/build
-    # ./test_yolo3
+     ./test_yolo3
     ./demo yolo3_fp32.rt ../demo/yolo_test.mp4 y
     exit 0
 }

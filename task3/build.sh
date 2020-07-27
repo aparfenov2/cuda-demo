@@ -66,9 +66,9 @@ fi
 }
 
 IMAGE=andrey-task3
-docker build -t ${IMAGE} .
+# docker build -t ${IMAGE} .
 
-docker run -it --runtime nvidia -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
+docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     -v $PWD:/cdir \
     -w /cdir \
     ${IMAGE} bash $0 --inside

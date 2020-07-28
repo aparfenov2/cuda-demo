@@ -45,12 +45,13 @@ def detect(save_img=False):
     # Get names and colors
     names = model.module.names if hasattr(model, 'module') else model.names
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
-
+    detlog = open('detlog.txt','w')
+    total_detections = 0
     # Run inference
     t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
-    for path, img, im0s, vid_cap in dataset:
+    for fidx, (path, img, im0s, vid_cap) in enumerate(dataset):
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -69,6 +70,8 @@ def detect(save_img=False):
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
 
+        detlog.write(f"{fidx} {len([1 for det in pred if det is not None and len(det)])}: ")
+
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
@@ -80,6 +83,7 @@ def detect(save_img=False):
             txt_path = str(Path(out) / Path(p).stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -91,17 +95,20 @@ def detect(save_img=False):
 
                 # Write results
                 for *xyxy, conf, cls in det:
+                    detlog.write(('%g ' * 5 + ';') % (*xyxy, cls))
+                    total_detections += 1
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * 5 + '\n') % (cls, *xywh))  # label format
 
-                    if save_img or view_img:  # Add bbox to image
+                    if save_img or view_img:  # detlog.writedetlog.writeAdd bbox to image
                         label = '%s %.2f' % (names[int(cls)], conf)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
 
             # Print time (inference + NMS)
-            print('%sDone. (%.3fs)' % (s, t2 - t1))
+            print('%sDone. (%.3fs = %4.3f fps). dets=%d, fidx=%d, dets/fidx=%4.3f' % (s, t2 - t1, 1/(t2-t1), total_detections, fidx, total_detections/(fidx+1)))
+            detlog.write('\n')
 
             # Stream results
             if view_img:
@@ -130,8 +137,8 @@ def detect(save_img=False):
         print('Results saved to %s' % os.getcwd() + os.sep + out)
         if platform == 'darwin' and not opt.update:  # MacOS
             os.system('open ' + save_path)
-
-    print('Done. (%.3fs)' % (time.time() - t0))
+    detlog.close()
+    print('Done. (%.3fs = %4.3f fps)' % (time.time() - t0 , 1/(time.time() - t0)))
 
 
 if __name__ == '__main__':

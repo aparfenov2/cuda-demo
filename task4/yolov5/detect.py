@@ -45,14 +45,16 @@ def detect(save_img=False):
     # Get names and colors
     names = model.module.names if hasattr(model, 'module') else model.names
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
-    detlog = open('detlog.txt','w')
+    detlog = open(f'{out}/detlog.txt','w')
     total_detections = 0
     # Run inference
     t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
     for fidx, (path, img, im0s, vid_cap) in enumerate(dataset):
+        #print(f"img.shape", img.shape) # 3,448,640
         img = torch.from_numpy(img).to(device)
+        # exit(0)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
@@ -92,10 +94,10 @@ def detect(save_img=False):
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += '%g %ss, ' % (n, names[int(c)])  # add to string
-
+                # print("s",s)
                 # Write results
                 for *xyxy, conf, cls in det:
-                    detlog.write(('%g ' * 5 + ';') % (*xyxy, cls))
+                    detlog.write(('%g ' * 4 + '%s;') % (*xyxy, names[int(cls)]))
                     total_detections += 1
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh

@@ -10,6 +10,12 @@ python detect.py --device 0 \
     --output /cdir/output \
     --save-txt
 exit 0
+# export
+export PYTHONPATH="$PWD"
+python models/export.py \
+    --weights yolov5s.pt \
+    --img 640 --batch 1
+exit 0
 }
 
 docker run --gpus all --ipc=host -it --rm \

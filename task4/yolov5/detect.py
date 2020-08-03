@@ -53,6 +53,8 @@ def detect(save_img=False):
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
     for fidx, (path, img, im0s, vid_cap) in enumerate(dataset):
         #print(f"img.shape", img.shape) # 3,448,640
+        # print("img.dtype", img.dtype)
+        # exit(0)
         img = torch.from_numpy(img).to(device)
         # exit(0)
         img = img.half() if half else img.float()  # uint8 to fp16/32

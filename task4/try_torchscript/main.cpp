@@ -7,6 +7,9 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include "argparse.h"
+#include <chrono>
+
 // #include "xtensor/xarray.hpp"
 // #include "xtensor/xio.hpp"
 // #include "xtensor/xadapt.hpp"
@@ -77,16 +80,29 @@ void letterbox(cv::Mat &img) {
 }
 
 int main(int argc, const char* argv[]) {
-  if (argc != 2) {
-    std::cerr << "usage: example-app <path-to-exported-script-model>\n";
+
+  argparse::ArgumentParser parser("example", "Argument parser example");
+
+  parser.add_argument().names({"--model"}).description("model weights").required(true);
+  parser.add_argument().names({"--video"}).description("video to process").required(true);
+  parser.enable_help();
+
+  auto err = parser.parse(argc, argv);
+  if (err) {
+    std::cout << err << std::endl;
     return -1;
+  }
+
+  if (parser.exists("help")) {
+    parser.print_help();
+    return 0;
   }
 
 
   torch::jit::script::Module model;
   try {
     // Deserialize the ScriptModule from a file using torch::jit::load().
-    model = torch::jit::load(argv[1]);
+    model = torch::jit::load(parser.get<std::string>("model"), torch::kCUDA);
   }
   catch (const c10::Error& e) {
     std::cerr << "error loading the model\n";
@@ -97,21 +113,21 @@ int main(int argc, const char* argv[]) {
 
   std::cout << "ok\n";
 
-  std::string filename = "yourfile.avi";
-  cv::VideoCapture capture(filename);
+  cv::VideoCapture capture(parser.get<std::string>("video"));
   cv::Mat frame;
 
   if( !capture.isOpened() )
       throw "Error when reading steam_avi";
-
-  for( ; ; )
+  auto begin = std::chrono::steady_clock::now();
+  for(int fidx=0; ;fidx++ )
   {
       capture >> frame;
       if(frame.empty())
           break;
       cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
       letterbox(frame);
-
+      // std::cout << "frame.shape" << frame.rows << "x" << frame.cols << std::endl; // 448x640
+      // break;
       // auto frame_nc = nc::NdArray<nc::uint8>(frame.data, frame.rows, frame.cols);
       // frame_nc = frame_nc.transpose();
 
@@ -134,8 +150,14 @@ int main(int argc, const char* argv[]) {
       std::vector<torch::jit::IValue> inputs;
       // inputs.push_back(torch::ones({1, 3, 224, 224}));
       inputs.push_back(image);
-      auto pred = model.forward(inputs).toTensor();
-      std:: cout << "pred.shape " << pred.dim() << std::endl;
+      auto pred = model.forward(inputs).toTensorVector()[0];
+      auto end = std::chrono::steady_clock::now();
+      auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+      auto s = std::chrono::duration_cast<std::chrono::seconds>(end - begin).count();
+      std::cout << "fps= " << fidx << "/" << ms << "[ms] = " << float(fidx)/s << std::endl;
+
+      // decltype(pred)::foo= 1;
+      // std:: cout << "pred.shape " << pred.sizes() << std::endl;
       // std::cout << output.slice(/*dim=*/1, /*start=*/0, /*end=*/5) << '\n';
       // TODO: apply NMS
   }

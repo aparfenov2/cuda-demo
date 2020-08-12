@@ -121,13 +121,17 @@ class DetectionNN {
             tk::dnn::dataDim_t dim = netRT->input_dim;
             dim.n = cur_batches;
             {
+                static bool first_time = true;                
                 if(TKDNN_VERBOSE) dim.print();
                 TKDNN_TSTART
                 netRT->infer(dim, input_d);
                 TKDNN_TSTOP
                 if(TKDNN_VERBOSE) dim.print();
-                stats.push_back(t_ns);
+                if (!first_time) {
+                    stats.push_back(t_ns);
+                }
                 if(save_times) *times<<t_ns<<";";
+                first_time = false;
             }
 
             batchDetected.clear();

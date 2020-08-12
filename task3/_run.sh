@@ -47,7 +47,7 @@ export TKDNN_MODE=${_TKDNN_MODE^^}
   echo "prepare!"
   rm yolo4tiny_*.rt || true
   ./test_yolo4tiny
-  ls -l
+  # ls -l
 }
 set -x
     ./demo yolo4tiny_${_TKDNN_MODE}.rt ../../${video} y 80 ${_TKDNN_BATCHSIZE} 0

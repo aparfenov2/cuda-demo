@@ -70,7 +70,7 @@ if true; then
     -D CMAKE_PREFIX_PATH="/cdir/eigen/install;/cdir/opencv/install" \
     -D CUDA_nvinfer_LIBRARY="/usr/lib/x86_64-linux-gnu/libnvinfer.so" \
     -D CMAKE_INSTALL_PREFIX=../install ..
-    VERBOSE=1 make -j8
+    make -j8
 
     # -D Eigen3_DIR=$PWD/eigen/install/share/eigen3/cmake \
 fi

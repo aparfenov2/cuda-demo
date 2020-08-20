@@ -4,6 +4,7 @@ OPENCV_INSTALL=$PWD/opencv/install
 video=video_320.mp4
 _TKDNN_MODE=fp32
 _TKDNN_BATCHSIZE=1
+_SHOW=0
 POSITIONAL=("$@")
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -12,6 +13,7 @@ while [[ "$#" -gt 0 ]]; do
         --inside) inside=1 ;;
         --batch) _TKDNN_BATCHSIZE="$2"; shift ;;
         --mode) _TKDNN_MODE="$2"; shift ;;
+        --show) _SHOW=1 ;;
         --prep) prep=1 ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
@@ -50,7 +52,7 @@ export TKDNN_MODE=${_TKDNN_MODE^^}
   # ls -l
 }
 set -x
-    ./demo yolo4tiny_${_TKDNN_MODE}.rt ../../${video} y 80 ${_TKDNN_BATCHSIZE} 0
+    ./demo yolo4tiny_${_TKDNN_MODE}.rt ../../${video} y 80 ${_TKDNN_BATCHSIZE} ${_SHOW}
     exit 0
 }
 

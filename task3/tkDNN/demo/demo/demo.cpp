@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
 
                     all_detected_classes.emplace(det_class);
 
-                    out << x0 << " " << y0 << " " << x1 << " " << y1 << " " << det_class << "; ";
+                    out << x0 << " " << y0 << " " << x1 << " " << y1 << " " << det_class << " " << b.prob << "; ";
                 }
                 out << std::endl;
             }

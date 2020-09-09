@@ -70,7 +70,7 @@ IMAGE=andrey-task3
 
 docker run -it --gpus all -e NVIDIA_DRIVER_CAPABILITIES=video,compute,utility \
     -v $PWD:/cdir \
+    -v $(readlink -f opencv):/cdir/opencv \
     -w /cdir \
     ${IMAGE} bash $0 --inside
 
-#    -v $(readlink -f opencv):/cdir/opencv \
